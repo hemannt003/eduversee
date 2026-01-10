@@ -11,12 +11,14 @@ const api = axios.create({
 
 // Add token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth-storage');
-  if (token) {
+  const authStorage = localStorage.getItem('auth-storage');
+  if (authStorage) {
     try {
-      const parsed = JSON.parse(token);
-      if (parsed.state?.token) {
-        config.headers.Authorization = `Bearer ${parsed.state.token}`;
+      const parsed = JSON.parse(authStorage);
+      // Handle both zustand persist format and our custom format
+      const token = parsed.state?.token || parsed.token;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (e) {
       // Ignore

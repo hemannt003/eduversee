@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
 import User from '../models/User';
 import Team from '../models/Team';
@@ -24,18 +25,21 @@ export const sendFriendRequest = asyncHandler(async (req: AuthRequest, res: Resp
     throw new Error('User not found');
   }
 
-  if (currentUser!.friends.includes(targetUserId as any)) {
+  const targetUserIdObj = new mongoose.Types.ObjectId(targetUserId);
+  const currentUserIdObj = req.user!._id;
+
+  if (currentUser!.friends.some((id) => id.toString() === targetUserId)) {
     res.status(400);
     throw new Error('Already friends');
   }
 
-  if (currentUser!.friendRequests.sent.includes(targetUserId as any)) {
+  if (currentUser!.friendRequests.sent.some((id) => id.toString() === targetUserId)) {
     res.status(400);
     throw new Error('Friend request already sent');
   }
 
-  currentUser!.friendRequests.sent.push(targetUserId as any);
-  targetUser.friendRequests.received.push(req.user!._id);
+  currentUser!.friendRequests.sent.push(targetUserIdObj);
+  targetUser.friendRequests.received.push(currentUserIdObj);
   
   await currentUser!.save();
   await targetUser.save();
@@ -59,14 +63,17 @@ export const acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Re
     throw new Error('User not found');
   }
 
-  if (!currentUser!.friendRequests.received.includes(senderUserId as any)) {
+  const senderUserIdObj = new mongoose.Types.ObjectId(senderUserId);
+  const currentUserIdObj = req.user!._id;
+
+  if (!currentUser!.friendRequests.received.some((id) => id.toString() === senderUserId)) {
     res.status(400);
     throw new Error('No pending friend request from this user');
   }
 
   // Add to friends list
-  currentUser!.friends.push(senderUserId as any);
-  senderUser.friends.push(req.user!._id);
+  currentUser!.friends.push(senderUserIdObj);
+  senderUser.friends.push(currentUserIdObj);
 
   // Remove from requests
   currentUser!.friendRequests.received = currentUser!.friendRequests.received.filter(

@@ -2,30 +2,71 @@ import { RedisClientType } from 'redis';
 import { createClient } from 'redis';
 
 let redisClient: RedisClientType | null = null;
+let isConnecting = false;
+let connectionPromise: Promise<void> | null = null;
 
 // Initialize Redis client
-const initRedis = async () => {
-  if (process.env.REDIS_HOST && !redisClient) {
-    redisClient = createClient({
-      socket: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-      },
-    });
+const initRedis = async (): Promise<void> => {
+  if (process.env.REDIS_HOST && !redisClient && !isConnecting) {
+    isConnecting = true;
+    try {
+      redisClient = createClient({
+        socket: {
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+        },
+      });
 
-    redisClient.on('error', (err) => {
-      console.error('Redis Client Error:', err);
-    });
+      redisClient.on('error', (err) => {
+        console.error('Redis Client Error:', err);
+        redisClient = null;
+        isConnecting = false;
+      });
 
-    await redisClient.connect();
+      await redisClient.connect();
+      console.log('Redis connected successfully');
+    } catch (error) {
+      console.error('Failed to connect to Redis:', error);
+      redisClient = null;
+    } finally {
+      isConnecting = false;
+    }
   }
 };
 
-initRedis().catch(console.error);
+// Ensure Redis is connected before operations
+const ensureConnected = async (): Promise<boolean> => {
+  if (redisClient) {
+    try {
+      // Check if client is still connected
+      await redisClient.ping();
+      return true;
+    } catch (error) {
+      // Client disconnected, reset
+      redisClient = null;
+    }
+  }
+
+  if (!isConnecting && !connectionPromise) {
+    connectionPromise = initRedis();
+  }
+
+  if (connectionPromise) {
+    await connectionPromise;
+    connectionPromise = null;
+  }
+
+  return redisClient !== null;
+};
+
+// Initialize on module load (non-blocking)
+initRedis().catch((error) => {
+  console.error('Redis initialization error:', error);
+});
 
 export const cache = {
   get: async (key: string): Promise<string | null> => {
-    if (!redisClient) return null;
+    if (!(await ensureConnected()) || !redisClient) return null;
     try {
       return await redisClient.get(key);
     } catch (error) {
@@ -39,7 +80,7 @@ export const cache = {
     value: string,
     expirationSeconds?: number
   ): Promise<void> => {
-    if (!redisClient) return;
+    if (!(await ensureConnected()) || !redisClient) return;
     try {
       if (expirationSeconds) {
         await redisClient.setEx(key, expirationSeconds, value);
@@ -52,7 +93,7 @@ export const cache = {
   },
 
   del: async (key: string): Promise<void> => {
-    if (!redisClient) return;
+    if (!(await ensureConnected()) || !redisClient) return;
     try {
       await redisClient.del(key);
     } catch (error) {
@@ -61,7 +102,7 @@ export const cache = {
   },
 
   clearPattern: async (pattern: string): Promise<void> => {
-    if (!redisClient) return;
+    if (!(await ensureConnected()) || !redisClient) return;
     try {
       const keys = await redisClient.keys(pattern);
       if (keys.length > 0) {

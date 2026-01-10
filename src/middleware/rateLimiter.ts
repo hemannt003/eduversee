@@ -1,24 +1,4 @@
 import rateLimit from 'express-rate-limit';
-import { RedisClientType } from 'redis';
-import { createClient } from 'redis';
-
-let redisClient: RedisClientType | null = null;
-
-// Initialize Redis client if available
-if (process.env.REDIS_HOST) {
-  redisClient = createClient({
-    socket: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-    },
-  });
-
-  redisClient.on('error', (err) => {
-    console.error('Redis Client Error:', err);
-  });
-
-  redisClient.connect().catch(console.error);
-}
 
 // General API rate limiter
 export const apiLimiter = rateLimit({

@@ -145,7 +145,7 @@ export const enrollCourse = asyncHandler(async (req: AuthRequest, res: Response)
     throw new Error('Course not found');
   }
 
-  if (course.enrolledStudents.includes(req.user!._id)) {
+  if (course.enrolledStudents.some((id) => id.toString() === req.user!._id.toString())) {
     res.status(400);
     throw new Error('Already enrolled in this course');
   }
@@ -179,7 +179,7 @@ export const completeLesson = asyncHandler(async (req: AuthRequest, res: Respons
     throw new Error('Lesson not found');
   }
 
-  if (lesson.completedBy.includes(req.user!._id)) {
+  if (lesson.completedBy.some((id) => id.toString() === req.user!._id.toString())) {
     res.status(400);
     throw new Error('Lesson already completed');
   }
@@ -190,21 +190,21 @@ export const completeLesson = asyncHandler(async (req: AuthRequest, res: Respons
   // Add XP to user
   const user = await User.findById(req.user!._id);
   if (user) {
-    user.addXP(lesson.xpReward);
-    await user.save();
-
-    // Check for level up
     const oldLevel = user.level;
-    const newLevel = user.calculateLevel();
-    if (newLevel > oldLevel) {
+    user.addXP(lesson.xpReward);
+    
+    // Check for level up before saving
+    if (user.level > oldLevel) {
       await Activity.create({
         user: user._id,
         type: 'level_up',
         title: 'Level Up!',
-        description: `You reached level ${newLevel}`,
-        metadata: { level: newLevel },
+        description: `You reached level ${user.level}`,
+        metadata: { level: user.level },
       });
     }
+    
+    await user.save();
 
     // Create activity
     await Activity.create({

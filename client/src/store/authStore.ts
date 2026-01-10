@@ -107,8 +107,10 @@ const storedToken = localStorage.getItem('auth-storage');
 if (storedToken) {
   try {
     const parsed = JSON.parse(storedToken);
-    if (parsed.state?.token) {
-      setToken(parsed.state.token);
+    // Handle both zustand persist format and our custom format
+    const token = parsed.state?.token || parsed.token;
+    if (token) {
+      setToken(token);
     }
   } catch (e) {
     // Ignore

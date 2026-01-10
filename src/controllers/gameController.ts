@@ -142,7 +142,7 @@ export const getQuests = asyncHandler(async (req: AuthRequest, res: Response) =>
   const user = await User.findById(req.user!._id);
   const completedQuestIds = new Set(
     quests
-      .filter((q) => q.completedBy.includes(user!._id))
+      .filter((q) => q.completedBy.some((id) => id.toString() === user!._id.toString()))
       .map((q) => q._id.toString())
   );
 
@@ -168,7 +168,7 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
     throw new Error('Quest not found or inactive');
   }
 
-  if (quest.completedBy.includes(req.user!._id)) {
+  if (quest.completedBy.some((id) => id.toString() === req.user!._id.toString())) {
     res.status(400);
     throw new Error('Quest already completed');
   }
