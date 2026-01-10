@@ -9,7 +9,7 @@ interface Lesson {
   title: string;
   order: number;
   xpReward: number;
-  completedBy: string[];
+  completedBy: (string | { toString(): string })[];
 }
 
 interface Course {
@@ -24,7 +24,7 @@ interface Course {
     avatar: string;
   };
   lessons: Lesson[];
-  enrolledStudents: string[];
+  enrolledStudents: (string | { toString(): string })[];
 }
 
 const CourseDetail = () => {
@@ -77,7 +77,13 @@ const CourseDetail = () => {
     return <div className="container">Course not found</div>;
   }
 
-  const isEnrolled = course.enrolledStudents.includes(user?.id);
+  // Handle both string and ObjectId types from backend
+  const isEnrolled = user ? course.enrolledStudents.some(
+    (id) => {
+      const idStr = typeof id === 'string' ? id : id.toString();
+      return idStr === user.id.toString();
+    }
+  ) : false;
   const sortedLessons = [...course.lessons].sort((a, b) => a.order - b.order);
 
   return (
@@ -105,7 +111,13 @@ const CourseDetail = () => {
           <h2>Lessons</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {sortedLessons.map((lesson) => {
-              const isCompleted = lesson.completedBy.includes(user?.id);
+              // Handle both string and ObjectId types from backend
+              const isCompleted = user ? lesson.completedBy.some(
+                (id) => {
+                  const idStr = typeof id === 'string' ? id : id.toString();
+                  return idStr === user.id.toString();
+                }
+              ) : false;
               return (
                 <div
                   key={lesson._id}

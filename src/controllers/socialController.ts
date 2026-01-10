@@ -4,7 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import User from '../models/User';
 import Team from '../models/Team';
 import Activity from '../models/Activity';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler, AppError } from '../middleware/errorHandler';
 import { cache } from '../utils/cache';
 
 // @desc    Send friend request
@@ -15,39 +15,55 @@ export const sendFriendRequest = asyncHandler(async (req: AuthRequest, res: Resp
   const currentUser = await User.findById(req.user!._id);
 
   if (!currentUser) {
-    res.status(404);
-    throw new Error('User not found');
+    throw new AppError('User not found', 404);
   }
 
   if (targetUserId === req.user!._id.toString()) {
-    res.status(400);
-    throw new Error('Cannot send friend request to yourself');
+    throw new AppError('Cannot send friend request to yourself', 400);
   }
 
   const targetUser = await User.findById(targetUserId);
   if (!targetUser) {
-    res.status(404);
-    throw new Error('User not found');
+    throw new AppError('User not found', 404);
   }
 
   const targetUserIdObj = new mongoose.Types.ObjectId(targetUserId);
   const currentUserIdObj = req.user!._id;
 
   if (currentUser.friends.some((id) => id.toString() === targetUserId)) {
-    res.status(400);
-    throw new Error('Already friends');
+    throw new AppError('Already friends', 400);
   }
 
   if (currentUser.friendRequests.sent.some((id) => id.toString() === targetUserId)) {
-    res.status(400);
-    throw new Error('Friend request already sent');
+    throw new AppError('Friend request already sent', 400);
   }
 
-  currentUser.friendRequests.sent.push(targetUserIdObj);
-  targetUser.friendRequests.received.push(currentUserIdObj);
-  
-  await currentUser.save();
-  await targetUser.save();
+  // Use atomic operations to prevent race conditions
+  const originalSentLength = currentUser.friendRequests.sent.length;
+  const updatedCurrentUser = await User.findByIdAndUpdate(
+    req.user!._id,
+    {
+      $addToSet: { 'friendRequests.sent': targetUserIdObj },
+    },
+    { new: true }
+  );
+
+  if (!updatedCurrentUser) {
+    throw new AppError('User not found', 404);
+  }
+
+  // Verify request was added (check if array length increased)
+  if (updatedCurrentUser.friendRequests.sent.length === originalSentLength) {
+    throw new AppError('Friend request already sent', 400);
+  }
+
+  // Add to target user's received requests atomically
+  await User.findByIdAndUpdate(
+    targetUserId,
+    {
+      $addToSet: { 'friendRequests.received': currentUserIdObj },
+    }
+  );
 
   res.json({
     success: true,
@@ -64,37 +80,49 @@ export const acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Re
   const senderUser = await User.findById(senderUserId);
 
   if (!currentUser) {
-    res.status(404);
-    throw new Error('Current user not found');
+    throw new AppError('Current user not found', 404);
   }
 
   if (!senderUser) {
-    res.status(404);
-    throw new Error('User not found');
+    throw new AppError('User not found', 404);
   }
 
   const senderUserIdObj = new mongoose.Types.ObjectId(senderUserId);
   const currentUserIdObj = req.user!._id;
 
   if (!currentUser.friendRequests.received.some((id) => id.toString() === senderUserId)) {
-    res.status(400);
-    throw new Error('No pending friend request from this user');
+    throw new AppError('No pending friend request from this user', 400);
   }
 
-  // Add to friends list
-  currentUser.friends.push(senderUserIdObj);
-  senderUser.friends.push(currentUserIdObj);
-
-  // Remove from requests
-  currentUser.friendRequests.received = currentUser.friendRequests.received.filter(
-    (id) => id.toString() !== senderUserId
+  // Use atomic operations to prevent race conditions
+  // Add to friends list atomically
+  const originalCurrentFriendsLength = currentUser.friends.length;
+  const updatedCurrentUser = await User.findByIdAndUpdate(
+    req.user!._id,
+    {
+      $addToSet: { friends: senderUserIdObj },
+      $pull: { 'friendRequests.received': senderUserIdObj },
+    },
+    { new: true }
   );
-  senderUser.friendRequests.sent = senderUser.friendRequests.sent.filter(
-    (id) => id.toString() !== req.user!._id.toString()
-  );
 
-  await currentUser.save();
-  await senderUser.save();
+  if (!updatedCurrentUser) {
+    throw new AppError('Current user not found', 404);
+  }
+
+  // Verify friend was added (check if array length increased)
+  if (updatedCurrentUser.friends.length === originalCurrentFriendsLength) {
+    throw new AppError('Already friends with this user', 400);
+  }
+
+  // Add to sender's friends list and remove from sent requests atomically
+  await User.findByIdAndUpdate(
+    senderUserId,
+    {
+      $addToSet: { friends: currentUserIdObj },
+      $pull: { 'friendRequests.sent': currentUserIdObj },
+    }
+  );
 
   // Create activities
   await Activity.create({
@@ -106,7 +134,7 @@ export const acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Re
   });
 
   await Activity.create({
-    user: senderUserId,
+    user: senderUserIdObj,
     type: 'friend_added',
     title: 'New Friend!',
     description: `You are now friends with ${currentUser.username}`,
@@ -129,8 +157,7 @@ export const getFriends = asyncHandler(async (req: AuthRequest, res: Response) =
     .populate('friendRequests.received', 'username avatar');
 
   if (!user) {
-    res.status(404);
-    throw new Error('User not found');
+    throw new AppError('User not found', 404);
   }
 
   res.json({
@@ -147,27 +174,37 @@ export const getFriends = asyncHandler(async (req: AuthRequest, res: Response) =
 // @route   POST /api/social/teams
 // @access  Private
 export const createTeam = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Filter req.body to only allow safe fields (prevent privilege escalation)
   const { name, description, maxMembers } = req.body;
 
-  const existingTeam = await Team.findOne({ name });
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    throw new AppError('Team name is required', 400);
+  }
+
+  // Validate maxMembers if provided
+  const validatedMaxMembers = maxMembers 
+    ? Math.max(2, Math.min(Number(maxMembers) || 20, 100)) // Between 2 and 100
+    : 20;
+
+  const existingTeam = await Team.findOne({ name: name.trim() });
   if (existingTeam) {
-    res.status(400);
-    throw new Error('Team name already exists');
+    throw new AppError('Team name already exists', 400);
   }
 
   const team = await Team.create({
-    name,
-    description,
-    leader: req.user!._id,
-    members: [req.user!._id],
-    maxMembers: maxMembers || 20,
+    name: name.trim(),
+    description: description ? String(description).trim() : '',
+    leader: req.user!._id, // Always set to current user
+    members: [req.user!._id], // Always start with creator
+    maxMembers: validatedMaxMembers,
+    xp: 0, // Always start at 0
+    level: 1, // Always start at 1
   });
 
   // Add user to team
   const user = await User.findById(req.user!._id);
   if (!user) {
-    res.status(404);
-    throw new Error('User not found');
+    throw new AppError('User not found', 404);
   }
   user.teamId = team._id;
   await user.save();
@@ -187,8 +224,7 @@ export const getTeam = asyncHandler(async (req: AuthRequest, res: Response) => {
     .populate('members', 'username avatar level xp');
 
   if (!team) {
-    res.status(404);
-    throw new Error('Team not found');
+    throw new AppError('Team not found', 404);
   }
 
   res.json({
@@ -203,36 +239,76 @@ export const getTeam = asyncHandler(async (req: AuthRequest, res: Response) => {
 export const joinTeam = asyncHandler(async (req: AuthRequest, res: Response) => {
   const team = await Team.findById(req.params.id);
   if (!team) {
-    res.status(404);
-    throw new Error('Team not found');
+    throw new AppError('Team not found', 404);
   }
 
-  if (team.members.length >= team.maxMembers) {
-    res.status(400);
-    throw new Error('Team is full');
-  }
-
+  // Check if already a member before atomic operation
   if (team.members.some((id) => id.toString() === req.user!._id.toString())) {
-    res.status(400);
-    throw new Error('Already a member of this team');
+    throw new AppError('Already a member of this team', 400);
   }
 
-  team.members.push(req.user!._id);
-  await team.save();
+  // Check team capacity before atomic operation
+  if (team.members.length >= team.maxMembers) {
+    throw new AppError('Team is full', 400);
+  }
+
+  // Use atomic operation to prevent TOCTOU race condition
+  // Use $addToSet to prevent duplicates and check length in update condition
+  const originalLength = team.members.length;
+  const updatedTeam = await Team.findByIdAndUpdate(
+    req.params.id,
+    {
+      $addToSet: { members: req.user!._id },
+    },
+    { new: true }
+  );
+
+  if (!updatedTeam) {
+    throw new AppError('Team not found', 404);
+  }
+
+  // Verify membership succeeded (check if array length increased)
+  // This handles edge case where concurrent request joined team between check and update
+  if (updatedTeam.members.length === originalLength) {
+    // Array length didn't increase, meaning $addToSet was a no-op
+    // This happens when a concurrent request joined the team between our check and update
+    throw new AppError('Already a member of this team', 400);
+  }
+
+  // Verify team capacity wasn't exceeded (race condition detection)
+  // If capacity is exceeded, rollback by removing the user we just added
+  if (updatedTeam.members.length > updatedTeam.maxMembers) {
+    // Rollback: remove the user we just added
+    await Team.findByIdAndUpdate(
+      req.params.id,
+      {
+        $pull: { members: req.user!._id },
+      }
+    );
+    throw new AppError('Team is full', 400);
+  }
 
   const user = await User.findById(req.user!._id);
   if (!user) {
-    res.status(404);
-    throw new Error('User not found');
+    throw new AppError('User not found', 404);
   }
-  user.teamId = team._id;
+  user.teamId = updatedTeam._id;
   await user.save();
 
   res.json({
     success: true,
-    data: team,
+    data: updatedTeam,
   });
 });
+
+// Helper function to validate and normalize pagination limit
+const validateLimit = (limit: any, defaultLimit: number = 20, minLimit: number = 1, maxLimit: number = 100): number => {
+  const parsed = Number(limit);
+  if (isNaN(parsed) || parsed <= 0) {
+    return defaultLimit;
+  }
+  return Math.max(minLimit, Math.min(parsed, maxLimit));
+};
 
 // @desc    Get activity feed
 // @route   GET /api/social/activity
@@ -240,12 +316,17 @@ export const joinTeam = asyncHandler(async (req: AuthRequest, res: Response) => 
 export const getActivityFeed = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { page = 1, limit = 20 } = req.query;
   
+  // Validate and normalize pagination parameters
+  const validatedLimit = validateLimit(limit, 20, 1, 100);
+  const validatedPage = Math.max(1, Number(page) || 1);
+  
   const user = await User.findById(req.user!._id);
   if (!user) {
-    res.status(404);
-    throw new Error('User not found');
+    throw new AppError('User not found', 404);
   }
-  const friendIds = user.friends.map((f: any) => f.toString());
+  // Use ObjectIds directly instead of converting to strings
+  // MongoDB $in query expects ObjectIds, not string representations
+  const friendIds = user.friends.map((f: any) => f);
   
   // Get activities from user and friends
   const activities = await Activity.find({
@@ -256,8 +337,8 @@ export const getActivityFeed = asyncHandler(async (req: AuthRequest, res: Respon
   })
     .populate('user', 'username avatar')
     .sort({ createdAt: -1 })
-    .limit(Number(limit) * 1)
-    .skip((Number(page) - 1) * Number(limit));
+    .limit(validatedLimit)
+    .skip((validatedPage - 1) * validatedLimit);
 
   const total = await Activity.countDocuments({
     $or: [
@@ -270,10 +351,10 @@ export const getActivityFeed = asyncHandler(async (req: AuthRequest, res: Respon
     success: true,
     data: activities,
     pagination: {
-      page: Number(page),
-      limit: Number(limit),
+      page: validatedPage,
+      limit: validatedLimit,
       total,
-      pages: Math.ceil(total / Number(limit)),
+      pages: total > 0 ? Math.ceil(total / validatedLimit) : 0,
     },
   });
 });
@@ -285,9 +366,11 @@ export const searchUsers = asyncHandler(async (req: AuthRequest, res: Response) 
   const { q, limit = 20 } = req.query;
 
   if (!q || (q as string).length < 2) {
-    res.status(400);
-    throw new Error('Search query must be at least 2 characters');
+    throw new AppError('Search query must be at least 2 characters', 400);
   }
+
+  // Validate and normalize limit to prevent DoS attacks
+  const validatedLimit = validateLimit(limit, 20, 1, 100);
 
   const users = await User.find({
     $or: [
@@ -297,7 +380,7 @@ export const searchUsers = asyncHandler(async (req: AuthRequest, res: Response) 
     _id: { $ne: req.user!._id },
   })
     .select('username avatar level xp')
-    .limit(Number(limit));
+    .limit(validatedLimit);
 
   res.json({
     success: true,

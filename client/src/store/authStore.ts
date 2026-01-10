@@ -25,6 +25,15 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 axios.defaults.baseURL = API_URL;
 
+// Define setToken before it's used
+const setToken = (token: string | null) => {
+  if (token) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete axios.defaults.headers.common['Authorization'];
+  }
+};
+
 export const useAuthStore = create<AuthState>((set) => {
   // Load from localStorage on init
   const loadFromStorage = () => {
@@ -93,14 +102,6 @@ export const useAuthStore = create<AuthState>((set) => {
     },
   };
 });
-
-const setToken = (token: string | null) => {
-  if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  } else {
-    delete axios.defaults.headers.common['Authorization'];
-  }
-};
 
 // Initialize token from storage
 const storedToken = localStorage.getItem('auth-storage');

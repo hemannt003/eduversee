@@ -81,6 +81,16 @@ export class ArenaService {
       throw new Error('Match not found');
     }
 
+    // Validate scores BEFORE database update to prevent data corruption
+    if (!scores || Object.keys(scores).length === 0) {
+      throw new Error('Scores cannot be empty');
+    }
+
+    // Validate winnerId is in scores BEFORE database update
+    if (!winnerId || !(winnerId in scores)) {
+      throw new Error('Winner ID must be present in scores');
+    }
+
     const duration = Math.floor(
       (new Date().getTime() - match.startedAt.getTime()) / 1000,
     );
@@ -97,7 +107,7 @@ export class ArenaService {
     });
 
     // Calculate XP rewards
-    const xpRewards = this.calculateMatchRewards(scores, match.type);
+    const xpRewards = this.calculateMatchRewards(scores, match.type, winnerId);
 
     // Update player stats and award XP
     for (const [playerId, score] of Object.entries(scores)) {
@@ -236,18 +246,23 @@ export class ArenaService {
   private calculateMatchRewards(
     scores: Record<string, number>,
     matchType: MatchType,
+    winnerId: string,
   ): Record<string, number> {
     const rewards: Record<string, number> = {};
     const baseXP = matchType === MatchType.RANKED ? 100 : 50;
 
-    // Winner gets bonus
-    const winnerId = Object.entries(scores).reduce((a, b) =>
-      scores[a[0]] > scores[b[0]] ? a : b,
-    )[0];
+    // Validate inputs
+    if (!scores || Object.keys(scores).length === 0) {
+      throw new Error('Scores cannot be empty');
+    }
+
+    if (!winnerId || !(winnerId in scores)) {
+      throw new Error('Winner ID must be present in scores');
+    }
 
     for (const [playerId, score] of Object.entries(scores)) {
       const isWinner = playerId === winnerId;
-      const scoreMultiplier = score / 100; // Normalize score
+      const scoreMultiplier = Math.max(score / 100, 0.1); // Normalize score, minimum 0.1
       rewards[playerId] = Math.floor(
         baseXP * scoreMultiplier * (isWinner ? 1.5 : 1.0),
       );
@@ -274,6 +289,7 @@ export class ArenaService {
           playerId,
           totalQuestsCompleted: 0,
           totalSkillsMastered: 0,
+          totalMatches: 1,
           winRate: isWinner ? 1.0 : 0.0,
           averageScore: score,
           playTime: 0,
@@ -282,22 +298,23 @@ export class ArenaService {
       return;
     }
 
-    // Calculate new win rate
-    const totalMatches = stats.totalQuestsCompleted || 1;
+    // Calculate new win rate using totalMatches
+    const totalMatches = stats.totalMatches || 0;
     const currentWins = Math.floor(stats.winRate * totalMatches);
     const newWins = isWinner ? currentWins + 1 : currentWins;
-    const newWinRate = newWins / (totalMatches + 1);
+    const newTotalMatches = totalMatches + 1;
+    const newWinRate = newWins / newTotalMatches;
 
     // Calculate new average score
     const currentTotalScore = stats.averageScore * totalMatches;
-    const newAverageScore = (currentTotalScore + score) / (totalMatches + 1);
+    const newAverageScore = (currentTotalScore + score) / newTotalMatches;
 
     await this.prisma.playerStats.update({
       where: { playerId },
       data: {
+        totalMatches: newTotalMatches,
         winRate: newWinRate,
         averageScore: newAverageScore,
-        totalQuestsCompleted: totalMatches + 1,
       },
     });
   }

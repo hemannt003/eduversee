@@ -36,7 +36,9 @@ const Leaderboard = () => {
     return <div className="container">Loading...</div>;
   }
 
-  const userRank = users.findIndex((u) => u._id === user?.id) + 1;
+  // Find user rank using string comparison to handle ObjectId/string mismatches
+  const userIndex = users.findIndex((u) => u._id.toString() === user?.id?.toString());
+  const userRank = userIndex >= 0 ? userIndex + 1 : 0;
 
   return (
     <div className="container">
@@ -56,7 +58,7 @@ const Leaderboard = () => {
         </button>
       </div>
 
-      {userRank > 0 && (
+      {userRank > 0 && user && (
         <div className="card" style={{ marginBottom: '2rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
           <h2>Your Rank: #{userRank}</h2>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -84,7 +86,7 @@ const Leaderboard = () => {
                 key={u._id}
                 style={{
                   borderBottom: '1px solid var(--border)',
-                  background: u._id === user?.id ? 'var(--light)' : 'transparent',
+                  background: u._id.toString() === user?.id?.toString() ? 'var(--light)' : 'transparent',
                 }}
               >
                 <td style={{ padding: '1rem', fontWeight: 'bold' }}>#{index + 1}</td>

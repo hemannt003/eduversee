@@ -176,6 +176,7 @@ model PlayerStats {
   totalXp           BigInt   @default(0)
   totalQuestsCompleted Int   @default(0)
   totalSkillsMastered Int    @default(0)
+  totalMatches      Int      @default(0)
   winRate           Float    @default(0)
   averageScore      Float    @default(0)
   playTime          Int      @default(0) // minutes
@@ -252,7 +253,7 @@ model QuestCompletion {
   completionTime Int?    // seconds
   score         Int?
   
-  @@unique([questId, playerId, completedAt])
+  @@unique([questId, playerId])
   @@index([playerId])
   @@index([questId])
 }

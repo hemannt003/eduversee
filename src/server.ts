@@ -73,7 +73,7 @@ io.on('connection', (socket) => {
 
   // Activity update
   socket.on('activity-update', (data: { userId: string; activity: any }) => {
-    socket.to(`user:${data.userId}`).emit('activity-update', data.activity);
+    io.to(`user:${data.userId}`).emit('activity-update', data.activity);
   });
 
   socket.on('disconnect', () => {
@@ -81,7 +81,15 @@ io.on('connection', (socket) => {
   });
 });
 
-// Error handler
+// 404 handler - must be before error handler
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found`,
+  });
+});
+
+// Error handler - MUST be registered last to catch all errors
 app.use(errorHandler);
 
 // Connect to MongoDB
