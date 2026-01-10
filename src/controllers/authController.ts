@@ -118,6 +118,11 @@ export const getMe = asyncHandler(async (req: AuthRequest, res: Response) => {
     .populate('friends', 'username avatar level xp')
     .populate('teamId', 'name avatar level');
 
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
   res.json({
     success: true,
     data: user,

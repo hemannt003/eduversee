@@ -44,10 +44,15 @@ export const getLeaderboard = asyncHandler(async (req: AuthRequest, res: Respons
 export const getAchievements = asyncHandler(async (req: AuthRequest, res: Response) => {
   const user = await User.findById(req.user!._id).populate('achievements');
   
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+  
   const allAchievements = await Achievement.find();
   
   const userAchievementIds = new Set(
-    user!.achievements.map((a: any) => a._id.toString())
+    user.achievements.map((a: any) => a._id.toString())
   );
 
   const achievements = allAchievements.map((achievement) => ({
@@ -140,9 +145,13 @@ export const getQuests = asyncHandler(async (req: AuthRequest, res: Response) =>
   }).sort({ type: 1, createdAt: -1 });
 
   const user = await User.findById(req.user!._id);
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
   const completedQuestIds = new Set(
     quests
-      .filter((q) => q.completedBy.some((id) => id.toString() === user!._id.toString()))
+      .filter((q) => q.completedBy.some((id) => id.toString() === user._id.toString()))
       .map((q) => q._id.toString())
   );
 
@@ -219,32 +228,37 @@ export const getStats = asyncHandler(async (req: AuthRequest, res: Response) => 
     .populate('badges', 'name icon rarity')
     .populate('friends', 'username avatar level');
 
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
   const xpToNextLevel = (level: number) => {
     const nextLevelXP = Math.pow(level, 2) * 100;
     const currentLevelXP = Math.pow(level - 1, 2) * 100;
     return nextLevelXP - currentLevelXP;
   };
 
-  const currentLevelXP = Math.pow(user!.level - 1, 2) * 100;
-  const progressXP = user!.xp - currentLevelXP;
-  const neededXP = xpToNextLevel(user!.level);
+  const currentLevelXP = Math.pow(user.level - 1, 2) * 100;
+  const progressXP = user.xp - currentLevelXP;
+  const neededXP = xpToNextLevel(user.level);
 
   res.json({
     success: true,
     data: {
       user: {
-        username: user!.username,
-        avatar: user!.avatar,
-        xp: user!.xp,
-        level: user!.level,
-        streak: user!.streak,
+        username: user.username,
+        avatar: user.avatar,
+        xp: user.xp,
+        level: user.level,
+        streak: user.streak,
         progressXP,
         neededXP,
         progressPercent: Math.round((progressXP / neededXP) * 100),
       },
-      achievements: user!.achievements,
-      badges: user!.badges,
-      friends: user!.friends,
+      achievements: user.achievements,
+      badges: user.badges,
+      friends: user.friends,
     },
   });
 });
