@@ -14,6 +14,11 @@ export const sendFriendRequest = asyncHandler(async (req: AuthRequest, res: Resp
   const targetUserId = req.params.userId;
   const currentUser = await User.findById(req.user!._id);
 
+  if (!currentUser) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
   if (targetUserId === req.user!._id.toString()) {
     res.status(400);
     throw new Error('Cannot send friend request to yourself');
@@ -28,20 +33,20 @@ export const sendFriendRequest = asyncHandler(async (req: AuthRequest, res: Resp
   const targetUserIdObj = new mongoose.Types.ObjectId(targetUserId);
   const currentUserIdObj = req.user!._id;
 
-  if (currentUser!.friends.some((id) => id.toString() === targetUserId)) {
+  if (currentUser.friends.some((id) => id.toString() === targetUserId)) {
     res.status(400);
     throw new Error('Already friends');
   }
 
-  if (currentUser!.friendRequests.sent.some((id) => id.toString() === targetUserId)) {
+  if (currentUser.friendRequests.sent.some((id) => id.toString() === targetUserId)) {
     res.status(400);
     throw new Error('Friend request already sent');
   }
 
-  currentUser!.friendRequests.sent.push(targetUserIdObj);
+  currentUser.friendRequests.sent.push(targetUserIdObj);
   targetUser.friendRequests.received.push(currentUserIdObj);
   
-  await currentUser!.save();
+  await currentUser.save();
   await targetUser.save();
 
   res.json({
@@ -58,6 +63,11 @@ export const acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Re
   const currentUser = await User.findById(req.user!._id);
   const senderUser = await User.findById(senderUserId);
 
+  if (!currentUser) {
+    res.status(404);
+    throw new Error('Current user not found');
+  }
+
   if (!senderUser) {
     res.status(404);
     throw new Error('User not found');
@@ -66,24 +76,24 @@ export const acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Re
   const senderUserIdObj = new mongoose.Types.ObjectId(senderUserId);
   const currentUserIdObj = req.user!._id;
 
-  if (!currentUser!.friendRequests.received.some((id) => id.toString() === senderUserId)) {
+  if (!currentUser.friendRequests.received.some((id) => id.toString() === senderUserId)) {
     res.status(400);
     throw new Error('No pending friend request from this user');
   }
 
   // Add to friends list
-  currentUser!.friends.push(senderUserIdObj);
+  currentUser.friends.push(senderUserIdObj);
   senderUser.friends.push(currentUserIdObj);
 
   // Remove from requests
-  currentUser!.friendRequests.received = currentUser!.friendRequests.received.filter(
+  currentUser.friendRequests.received = currentUser.friendRequests.received.filter(
     (id) => id.toString() !== senderUserId
   );
   senderUser.friendRequests.sent = senderUser.friendRequests.sent.filter(
     (id) => id.toString() !== req.user!._id.toString()
   );
 
-  await currentUser!.save();
+  await currentUser.save();
   await senderUser.save();
 
   // Create activities
@@ -99,8 +109,8 @@ export const acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Re
     user: senderUserId,
     type: 'friend_added',
     title: 'New Friend!',
-    description: `You are now friends with ${currentUser!.username}`,
-    metadata: { friendId: req.user!._id, friendUsername: currentUser!.username },
+    description: `You are now friends with ${currentUser.username}`,
+    metadata: { friendId: req.user!._id, friendUsername: currentUser.username },
   });
 
   res.json({
@@ -118,12 +128,17 @@ export const getFriends = asyncHandler(async (req: AuthRequest, res: Response) =
     .populate('friendRequests.sent', 'username avatar')
     .populate('friendRequests.received', 'username avatar');
 
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
   res.json({
     success: true,
     data: {
-      friends: user!.friends,
-      sentRequests: user!.friendRequests.sent,
-      receivedRequests: user!.friendRequests.received,
+      friends: user.friends,
+      sentRequests: user.friendRequests.sent,
+      receivedRequests: user.friendRequests.received,
     },
   });
 });
@@ -150,8 +165,12 @@ export const createTeam = asyncHandler(async (req: AuthRequest, res: Response) =
 
   // Add user to team
   const user = await User.findById(req.user!._id);
-  user!.teamId = team._id;
-  await user!.save();
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+  user.teamId = team._id;
+  await user.save();
 
   res.status(201).json({
     success: true,
@@ -193,7 +212,7 @@ export const joinTeam = asyncHandler(async (req: AuthRequest, res: Response) => 
     throw new Error('Team is full');
   }
 
-  if (team.members.includes(req.user!._id)) {
+  if (team.members.some((id) => id.toString() === req.user!._id.toString())) {
     res.status(400);
     throw new Error('Already a member of this team');
   }
@@ -202,8 +221,12 @@ export const joinTeam = asyncHandler(async (req: AuthRequest, res: Response) => 
   await team.save();
 
   const user = await User.findById(req.user!._id);
-  user!.teamId = team._id;
-  await user!.save();
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+  user.teamId = team._id;
+  await user.save();
 
   res.json({
     success: true,
@@ -218,7 +241,11 @@ export const getActivityFeed = asyncHandler(async (req: AuthRequest, res: Respon
   const { page = 1, limit = 20 } = req.query;
   
   const user = await User.findById(req.user!._id);
-  const friendIds = user!.friends.map((f: any) => f.toString());
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+  const friendIds = user.friends.map((f: any) => f.toString());
   
   // Get activities from user and friends
   const activities = await Activity.find({

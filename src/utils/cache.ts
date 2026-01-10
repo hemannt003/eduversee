@@ -21,6 +21,7 @@ const initRedis = async (): Promise<void> => {
         console.error('Redis Client Error:', err);
         redisClient = null;
         isConnecting = false;
+        connectionPromise = null; // Reset promise on error
       });
 
       await redisClient.connect();
@@ -28,6 +29,7 @@ const initRedis = async (): Promise<void> => {
     } catch (error) {
       console.error('Failed to connect to Redis:', error);
       redisClient = null;
+      connectionPromise = null; // Reset promise on failure
     } finally {
       isConnecting = false;
     }
@@ -44,6 +46,7 @@ const ensureConnected = async (): Promise<boolean> => {
     } catch (error) {
       // Client disconnected, reset
       redisClient = null;
+      connectionPromise = null; // Reset promise on disconnect
     }
   }
 
@@ -52,8 +55,17 @@ const ensureConnected = async (): Promise<boolean> => {
   }
 
   if (connectionPromise) {
-    await connectionPromise;
-    connectionPromise = null;
+    try {
+      await connectionPromise;
+    } catch (error) {
+      // Promise rejected, reset it to allow retry
+      connectionPromise = null;
+    } finally {
+      // Only set to null if we successfully completed
+      if (redisClient) {
+        connectionPromise = null;
+      }
+    }
   }
 
   return redisClient !== null;
