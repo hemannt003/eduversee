@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import User from '../models/User';
 import { generateToken } from '../utils/generateToken';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler, AppError } from '../middleware/errorHandler';
 import { cache } from '../utils/cache';
 
 // @desc    Register user
@@ -15,41 +15,36 @@ export const register = asyncHandler(async (req: AuthRequest, res: Response) => 
   const userExists = await User.findOne({ $or: [{ email }, { username }] });
 
   if (userExists) {
-    res.status(400);
-    throw new Error('User already exists');
+    throw new AppError('User already exists', 400);
   }
 
   // Create user
+  // User.create() either returns a user document or throws an error - never returns null
   const user = await User.create({
     username,
     email,
     password,
   });
 
-  if (user) {
-    const token = generateToken(user._id.toString());
-    
-    // Clear cache
-    await cache.clearPattern('leaderboard:*');
-    
-    res.status(201).json({
-      success: true,
-      data: {
-        token,
-        user: {
-          id: user._id,
-          username: user.username,
-          email: user.email,
-          xp: user.xp,
-          level: user.level,
-          avatar: user.avatar,
-        },
+  const token = generateToken(user._id.toString());
+  
+  // Clear cache
+  await cache.clearPattern('leaderboard:*');
+  
+  res.status(201).json({
+    success: true,
+    data: {
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        xp: user.xp,
+        level: user.level,
+        avatar: user.avatar,
       },
-    });
-  } else {
-    res.status(400);
-    throw new Error('Invalid user data');
-  }
+    },
+  });
 });
 
 // @desc    Login user
@@ -60,16 +55,14 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   // Validate email & password
   if (!email || !password) {
-    res.status(400);
-    throw new Error('Please provide email and password');
+    throw new AppError('Please provide email and password', 400);
   }
 
   // Check for user
   const user = await User.findOne({ email }).select('+password');
 
   if (!user || !(await user.comparePassword(password))) {
-    res.status(401);
-    throw new Error('Invalid credentials');
+    throw new AppError('Invalid credentials', 401);
   }
 
   // Update last active date for streak tracking
@@ -119,8 +112,7 @@ export const getMe = asyncHandler(async (req: AuthRequest, res: Response) => {
     .populate('teamId', 'name avatar level');
 
   if (!user) {
-    res.status(404);
-    throw new Error('User not found');
+    throw new AppError('User not found', 404);
   }
 
   res.json({

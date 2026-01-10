@@ -23,7 +23,8 @@ export interface IUser extends Document {
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
   calculateLevel(): number;
-  addXP(amount: number): void;
+  calculateXPMultiplier(): number;
+  addXP(amount: number): number; // Returns actual XP earned after multipliers
 }
 
 const UserSchema = new Schema<IUser>(
@@ -129,13 +130,42 @@ UserSchema.methods.calculateLevel = function (): number {
   return Math.floor(Math.sqrt(this.xp / 100)) + 1;
 };
 
-// Add XP and update level
-UserSchema.methods.addXP = function (amount: number): void {
-  this.xp += amount;
+// Calculate XP multiplier based on active bonuses
+UserSchema.methods.calculateXPMultiplier = function (): number {
+  let multiplier = 1.0;
+
+  // Streak bonus: 1% per day of streak, capped at 50% (50 days)
+  if (this.streak > 0) {
+    const streakBonus = Math.min(this.streak * 0.01, 0.5);
+    multiplier += streakBonus;
+  }
+
+  // Guild/Team bonus: 10% if user is in a team
+  if (this.teamId) {
+    multiplier += 0.1;
+  }
+
+  // Event bonus: Can be added later when event system is implemented
+  // For now, this is a placeholder for future expansion
+  // multiplier += eventBonus;
+
+  return multiplier;
+};
+
+// Add XP with multipliers and update level
+// Returns the actual XP earned after multipliers are applied
+UserSchema.methods.addXP = function (amount: number): number {
+  // Apply multipliers (streak, guild, event bonuses)
+  const multiplier = this.calculateXPMultiplier();
+  const finalXP = Math.floor(amount * multiplier);
+  
+  this.xp += finalXP;
   const newLevel = this.calculateLevel();
   if (newLevel > this.level) {
     this.level = newLevel;
   }
+  
+  return finalXP; // Return actual XP earned for accurate reporting
 };
 
 // Compare password

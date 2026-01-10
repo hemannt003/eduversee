@@ -30,9 +30,18 @@ export const protect = async (
     }
 
     try {
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) {
+        res.status(500).json({
+          success: false,
+          message: 'Server configuration error',
+        });
+        return;
+      }
+
       const decoded = jwt.verify(
         token,
-        process.env.JWT_SECRET || 'fallback-secret'
+        jwtSecret
       ) as { id: string };
 
       req.user = await User.findById(decoded.id).select('-password');
@@ -58,6 +67,7 @@ export const protect = async (
       success: false,
       message: 'Server error',
     });
+    return;
   }
 };
 

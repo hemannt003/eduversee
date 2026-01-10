@@ -1,8 +1,26 @@
 import { Request, Response, NextFunction } from 'express';
 
-export interface AppError extends Error {
-  statusCode?: number;
-  isOperational?: boolean;
+/**
+ * Custom error class for application errors with HTTP status codes
+ * Properly extends Error to maintain stack traces and error handling
+ */
+export class AppError extends Error {
+  statusCode: number;
+  isOperational: boolean;
+
+  constructor(message: string, statusCode: number = 500) {
+    super(message);
+    this.statusCode = statusCode;
+    this.isOperational = true;
+
+    // Maintain proper prototype chain for instanceof checks
+    Object.setPrototypeOf(this, AppError.prototype);
+    
+    // Capture stack trace if available
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
+  }
 }
 
 export const errorHandler = (
