@@ -1,0 +1,201 @@
+version: '3.8'
+
+services:
+  # Databases
+  postgres:
+    image: postgres:15-alpine
+    container_name: eduverse-postgres
+    environment:
+      POSTGRES_USER: eduverse
+      POSTGRES_PASSWORD: eduverse_dev
+      POSTGRES_DB: eduverse
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eduverse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: eduverse-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Message Queue
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: eduverse-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: eduverse-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Services
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: eduverse-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://eduverse:eduverse_dev@postgres:5432/eduverse
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: eduverse-auth
+    environment:
+      - DATABASE_URL=postgresql://eduverse:eduverse_dev@postgres:5432/eduverse
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  player-service:
+    build:
+      context: ./services/player-service
+      dockerfile: Dockerfile
+    container_name: eduverse-player
+    environment:
+      - DATABASE_URL=postgresql://eduverse:eduverse_dev@postgres:5432/eduverse
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    restart: unless-stopped
+
+  progression-engine:
+    build:
+      context: ./services/progression-engine
+      dockerfile: Dockerfile
+    container_name: eduverse-progression
+    environment:
+      - DATABASE_URL=postgresql://eduverse:eduverse_dev@postgres:5432/eduverse
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    restart: unless-stopped
+
+  quest-engine:
+    build:
+      context: ./services/quest-engine
+      dockerfile: Dockerfile
+    container_name: eduverse-quest
+    environment:
+      - DATABASE_URL=postgresql://eduverse:eduverse_dev@postgres:5432/eduverse
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    restart: unless-stopped
+
+  arena-engine:
+    build:
+      context: ./services/arena-engine
+      dockerfile: Dockerfile
+    container_name: eduverse-arena
+    environment:
+      - DATABASE_URL=postgresql://eduverse:eduverse_dev@postgres:5432/eduverse
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    restart: unless-stopped
+
+  economy-engine:
+    build:
+      context: ./services/economy-engine
+      dockerfile: Dockerfile
+    container_name: eduverse-economy
+    environment:
+      - DATABASE_URL=postgresql://eduverse:eduverse_dev@postgres:5432/eduverse
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    restart: unless-stopped
+
+  realtime-engine:
+    build:
+      context: ./services/realtime-engine
+      dockerfile: Dockerfile
+    container_name: eduverse-realtime
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://eduverse:eduverse_dev@postgres:5432/eduverse
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: eduverse-network
