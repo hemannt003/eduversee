@@ -252,6 +252,20 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
     throw new AppError('User not found', 404);
   }
 
+  // Re-read quest right before atomic operation to get fresh state
+  // This helps detect if a concurrent request completed the quest between our initial read and the atomic update
+  const questBeforeUpdate = await Quest.findById(req.params.id);
+  if (!questBeforeUpdate || !questBeforeUpdate.isActive) {
+    throw new AppError('Quest not found or inactive', 404);
+  }
+
+  // Check again with fresh data - if user was completed by concurrent request, abort
+  if (questBeforeUpdate.completedBy.some((id) => id.toString() === req.user!._id.toString())) {
+    throw new AppError('Quest already completed', 400);
+  }
+
+  const lengthBeforeUpdate = questBeforeUpdate.completedBy.length;
+
   // Use atomic operation to prevent TOCTOU race condition
   const updatedQuest = await Quest.findByIdAndUpdate(
     req.params.id,
@@ -265,9 +279,22 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
     throw new AppError('Quest not found or inactive', 404);
   }
 
-  // Verify completion succeeded (check if array length increased)
-  // This handles edge case where concurrent request completed quest between check and update
-  if (updatedQuest.completedBy.length === quest.completedBy.length) {
+  // Verify completion succeeded by checking:
+  // 1. User is actually in the updated array (operation succeeded)
+  // 2. Array length increased (our $addToSet actually added the user)
+  const isCompletedAfter = updatedQuest.completedBy.some(
+    (id) => id.toString() === req.user!._id.toString()
+  );
+  const lengthAfterUpdate = updatedQuest.completedBy.length;
+
+  // Check 1: User must be in updated array (operation must have succeeded)
+  if (!isCompletedAfter) {
+    throw new AppError('Failed to complete quest', 500);
+  }
+
+  // Check 2: If length didn't increase, $addToSet was a no-op
+  // This means a concurrent request completed the quest between our re-read and the atomic update
+  if (lengthAfterUpdate === lengthBeforeUpdate) {
     throw new AppError('Quest already completed', 400);
   }
 
@@ -284,7 +311,16 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
     );
   }
 
+  // Save user with XP and level changes
+  // Note: Badges were already added atomically above, so we don't need to add them to user object
   await user.save();
+
+  // Refresh user to get latest state including badges added atomically
+  // This ensures the response and cache invalidation use the most up-to-date user data
+  const refreshedUser = await User.findById(req.user!._id);
+  if (!refreshedUser) {
+    throw new AppError('User not found', 404);
+  }
 
   // Create activity with actual XP earned (after multipliers)
   await Activity.create({
@@ -296,14 +332,14 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
   });
 
   await cache.clearPattern('leaderboard:*');
-  await cache.del(`user:${user._id}`);
+  await cache.del(`user:${refreshedUser._id}`);
 
   res.json({
     success: true,
     data: {
       quest: updatedQuest,
       xpEarned: actualXPEarned, // Return actual XP earned after multipliers
-      newLevel: user.level,
+      newLevel: refreshedUser.level, // Use refreshed user for accurate level
     },
   });
 });

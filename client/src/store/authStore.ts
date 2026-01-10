@@ -36,7 +36,11 @@ const setToken = (token: string | null) => {
 
 export const useAuthStore = create<AuthState>((set) => {
   // Load from localStorage on init
+  // Guard against SSR/build-time execution (though this is client-side only)
   const loadFromStorage = () => {
+    if (typeof window === 'undefined') {
+      return { user: null, token: null };
+    }
     try {
       const stored = localStorage.getItem('auth-storage');
       if (stored) {
@@ -63,7 +67,9 @@ export const useAuthStore = create<AuthState>((set) => {
         const response = await axios.post('/auth/login', { email, password });
         const { token, user } = response.data.data;
         setToken(token);
-        localStorage.setItem('auth-storage', JSON.stringify({ user, token }));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('auth-storage', JSON.stringify({ user, token }));
+        }
         set({ user, token, loading: false });
       } catch (error: any) {
         set({ loading: false });
@@ -80,7 +86,9 @@ export const useAuthStore = create<AuthState>((set) => {
         });
         const { token, user } = response.data.data;
         setToken(token);
-        localStorage.setItem('auth-storage', JSON.stringify({ user, token }));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('auth-storage', JSON.stringify({ user, token }));
+        }
         set({ user, token, loading: false });
       } catch (error: any) {
         set({ loading: false });
@@ -89,14 +97,18 @@ export const useAuthStore = create<AuthState>((set) => {
     },
     logout: () => {
       setToken(null);
-      localStorage.removeItem('auth-storage');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth-storage');
+      }
       set({ user: null, token: null });
     },
     updateUser: (user: User) => {
-      const current = localStorage.getItem('auth-storage');
-      if (current) {
-        const parsed = JSON.parse(current);
-        localStorage.setItem('auth-storage', JSON.stringify({ ...parsed, user }));
+      if (typeof window !== 'undefined') {
+        const current = localStorage.getItem('auth-storage');
+        if (current) {
+          const parsed = JSON.parse(current);
+          localStorage.setItem('auth-storage', JSON.stringify({ ...parsed, user }));
+        }
       }
       set({ user });
     },
@@ -104,16 +116,19 @@ export const useAuthStore = create<AuthState>((set) => {
 });
 
 // Initialize token from storage
-const storedToken = localStorage.getItem('auth-storage');
-if (storedToken) {
-  try {
-    const parsed = JSON.parse(storedToken);
-    // Handle both zustand persist format and our custom format
-    const token = parsed.state?.token || parsed.token;
-    if (token) {
-      setToken(token);
+// Guard against SSR/build-time execution (though this is client-side only)
+if (typeof window !== 'undefined') {
+  const storedToken = localStorage.getItem('auth-storage');
+  if (storedToken) {
+    try {
+      const parsed = JSON.parse(storedToken);
+      // Handle both zustand persist format and our custom format
+      const token = parsed.state?.token || parsed.token;
+      if (token) {
+        setToken(token);
+      }
+    } catch (e) {
+      // Ignore
     }
-  } catch (e) {
-    // Ignore
   }
 }
