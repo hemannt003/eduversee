@@ -247,11 +247,6 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
     throw new AppError('Quest already completed', 400);
   }
 
-  const user = await User.findById(req.user!._id);
-  if (!user) {
-    throw new AppError('User not found', 404);
-  }
-
   // Re-read quest right before atomic operation to get fresh state
   // This helps detect if a concurrent request completed the quest between our initial read and the atomic update
   const questBeforeUpdate = await Quest.findById(req.params.id);
@@ -270,7 +265,7 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
   const updatedQuest = await Quest.findByIdAndUpdate(
     req.params.id,
     {
-      $addToSet: { completedBy: user._id },
+      $addToSet: { completedBy: req.user!._id },
     },
     { new: true }
   );
@@ -298,8 +293,15 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
     throw new AppError('Quest already completed', 400);
   }
 
-  // Add rewards
-  const actualXPEarned = user.addXP(updatedQuest.rewards.xp);
+  // Re-fetch user immediately before XP calculation to get fresh streak/teamId
+  // This prevents race condition where concurrent requests modify user between initial fetch and XP calculation
+  const freshUser = await User.findById(req.user!._id);
+  if (!freshUser) {
+    throw new AppError('User not found', 404);
+  }
+
+  // Add rewards using fresh user data for accurate multiplier calculation
+  const actualXPEarned = freshUser.addXP(updatedQuest.rewards.xp);
   
   // Use atomic operation to add badges (prevent duplicates)
   if (updatedQuest.rewards.badges && updatedQuest.rewards.badges.length > 0) {
@@ -313,7 +315,7 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
 
   // Save user with XP and level changes
   // Note: Badges were already added atomically above, so we don't need to add them to user object
-  await user.save();
+  await freshUser.save();
 
   // Refresh user to get latest state including badges added atomically
   // This ensures the response and cache invalidation use the most up-to-date user data
@@ -324,7 +326,7 @@ export const completeQuest = asyncHandler(async (req: AuthRequest, res: Response
 
   // Create activity with actual XP earned (after multipliers)
   await Activity.create({
-    user: user._id,
+    user: freshUser._id,
     type: 'quest_completed',
     title: 'Quest Completed!',
     description: `You completed: ${updatedQuest.title}`,

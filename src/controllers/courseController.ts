@@ -307,7 +307,8 @@ export const completeLesson = asyncHandler(async (req: AuthRequest, res: Respons
     throw new AppError('Lesson already completed', 400);
   }
 
-  // Add XP to user
+  // Re-fetch user immediately before XP calculation to get fresh streak/teamId
+  // This prevents race condition where concurrent requests modify user between initial fetch and XP calculation
   const user = await User.findById(req.user!._id);
   if (!user) {
     throw new AppError('User not found', 404);
