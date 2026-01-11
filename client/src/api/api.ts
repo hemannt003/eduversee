@@ -28,6 +28,32 @@ api.interceptors.request.use((config) => {
     }
   }
   return config;
+}, (error) => {
+  // Handle request error
+  return Promise.reject(error);
 });
+
+// Add response interceptor to handle errors consistently
+api.interceptors.response.use(
+  (response) => {
+    // Return successful responses as-is
+    return response;
+  },
+  (error) => {
+    // Handle response errors
+    if (error.response) {
+      // Server responded with error status
+      // The error will be handled by the calling code
+      return Promise.reject(error);
+    } else if (error.request) {
+      // Request was made but no response received
+      // This could be a network error, CORS issue, or server down
+      return Promise.reject(error);
+    } else {
+      // Something else happened
+      return Promise.reject(error);
+    }
+  }
+);
 
 export default api;
