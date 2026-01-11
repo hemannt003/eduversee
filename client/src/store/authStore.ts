@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import axios from 'axios';
+import api from '../api/api';
 
 interface User {
   id: string;
@@ -21,16 +21,28 @@ interface AuthState {
   updateUser: (user: User) => void;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-axios.defaults.baseURL = API_URL;
-
 // Define setToken before it's used
+// Note: We still need to set the token on the api instance for the interceptor
 const setToken = (token: string | null) => {
   if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    // Store token in localStorage for the interceptor to pick up
+    if (typeof window !== 'undefined') {
+      const current = localStorage.getItem('auth-storage');
+      if (current) {
+        const parsed = JSON.parse(current);
+        localStorage.setItem('auth-storage', JSON.stringify({ ...parsed, token }));
+      }
+    }
   } else {
-    delete axios.defaults.headers.common['Authorization'];
+    // Remove token from localStorage
+    if (typeof window !== 'undefined') {
+      const current = localStorage.getItem('auth-storage');
+      if (current) {
+        const parsed = JSON.parse(current);
+        delete parsed.token;
+        localStorage.setItem('auth-storage', JSON.stringify(parsed));
+      }
+    }
   }
 };
 
@@ -64,7 +76,7 @@ export const useAuthStore = create<AuthState>((set) => {
     login: async (email: string, password: string) => {
       set({ loading: true });
       try {
-        const response = await axios.post('/auth/login', { email, password });
+        const response = await api.post('/auth/login', { email, password });
         const { token, user } = response.data.data;
         setToken(token);
         if (typeof window !== 'undefined') {
@@ -79,7 +91,7 @@ export const useAuthStore = create<AuthState>((set) => {
     register: async (username: string, email: string, password: string) => {
       set({ loading: true });
       try {
-        const response = await axios.post('/auth/register', {
+        const response = await api.post('/auth/register', {
           username,
           email,
           password,

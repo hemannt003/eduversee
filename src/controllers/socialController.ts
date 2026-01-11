@@ -191,15 +191,29 @@ export const createTeam = asyncHandler(async (req: AuthRequest, res: Response) =
     throw new AppError('Team name already exists', 400);
   }
 
-  const team = await Team.create({
-    name: name.trim(),
-    description: description ? String(description).trim() : '',
-    leader: req.user!._id, // Always set to current user
-    members: [req.user!._id], // Always start with creator
-    maxMembers: validatedMaxMembers,
-    xp: 0, // Always start at 0
-    level: 1, // Always start at 1
-  });
+  // Attempt to create team
+  // Handle TOCTOU race condition: if two requests try to create the same team name
+  // simultaneously, MongoDB's unique constraint will catch the duplicate
+  let team;
+  try {
+    team = await Team.create({
+      name: name.trim(),
+      description: description ? String(description).trim() : '',
+      leader: req.user!._id, // Always set to current user
+      members: [req.user!._id], // Always start with creator
+      maxMembers: validatedMaxMembers,
+      xp: 0, // Always start at 0
+      level: 1, // Always start at 1
+    });
+  } catch (error: any) {
+    // MongoDB duplicate key error (E11000) occurs when unique constraint is violated
+    // This handles the race condition where two requests create the same team name
+    if (error.code === 11000 || error.code === 11001) {
+      throw new AppError('Team name already exists', 400);
+    }
+    // Re-throw other errors
+    throw error;
+  }
 
   // Add user to team
   const user = await User.findById(req.user!._id);
