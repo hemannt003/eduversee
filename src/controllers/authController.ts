@@ -113,18 +113,28 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
   }
 
   // Update last active date for streak tracking
+  // Only update if it's a new day to prevent multiple updates on same day
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const lastActive = new Date(user.lastActiveDate);
   lastActive.setHours(0, 0, 0, 0);
 
+  // Only update streak if logging in on a different day
   if (today.getTime() > lastActive.getTime()) {
     const daysDiff = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
     if (daysDiff === 1) {
+      // Consecutive day - increment streak
       user.streak += 1;
     } else if (daysDiff > 1) {
+      // Streak broken - reset to 1
       user.streak = 1;
     }
+    // Update lastActiveDate only when streak is updated (new day)
+    user.lastActiveDate = new Date();
+    await user.save();
+  } else if (today.getTime() === lastActive.getTime()) {
+    // Same day login - just update lastActiveDate timestamp (not the day)
+    // This allows tracking last activity time without affecting streak
     user.lastActiveDate = new Date();
     await user.save();
   }
