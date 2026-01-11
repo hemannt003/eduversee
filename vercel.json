@@ -1,5 +1,4 @@
 {
-  "_comment": "Frontend-only deployment configuration. Backend must be deployed separately to Railway, Render, or Heroku. See DEPLOYMENT_ARCHITECTURE.md for details.",
   "buildCommand": "npm install --prefix ./client && npm run build --prefix ./client",
   "outputDirectory": "client/dist",
   "installCommand": "npm install --prefix ./client",
