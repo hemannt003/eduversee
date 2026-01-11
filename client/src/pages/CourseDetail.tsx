@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import api from '../api/api';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
@@ -29,7 +29,6 @@ interface Course {
 
 const CourseDetail = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuthStore();

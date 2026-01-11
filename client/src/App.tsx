@@ -13,7 +13,7 @@ import Social from './pages/Social';
 import Profile from './pages/Profile';
 
 function App() {
-  const { user, token } = useAuthStore();
+  const { token } = useAuthStore();
 
   return (
     <div className="App">

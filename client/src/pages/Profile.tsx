@@ -20,7 +20,7 @@ interface Stats {
 }
 
 const Profile = () => {
-  const { user, updateUser } = useAuthStore();
+  const { updateUser } = useAuthStore();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 

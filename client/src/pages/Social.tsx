@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api/api';
 import toast from 'react-hot-toast';
-import { useAuthStore } from '../store/authStore';
 
 interface Friend {
   _id: string;
@@ -24,9 +23,7 @@ interface Activity {
 }
 
 const Social = () => {
-  const { user } = useAuthStore();
   const [friends, setFriends] = useState<Friend[]>([]);
-  const [sentRequests, setSentRequests] = useState<any[]>([]);
   const [receivedRequests, setReceivedRequests] = useState<any[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,7 +42,6 @@ const Social = () => {
     try {
       const response = await api.get('/social/friends');
       setFriends(response.data.data.friends);
-      setSentRequests(response.data.data.sentRequests);
       setReceivedRequests(response.data.data.receivedRequests);
     } catch (error: any) {
       toast.error('Failed to load friends');
