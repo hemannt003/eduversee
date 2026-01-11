@@ -59,11 +59,28 @@ export const register = asyncHandler(async (req: AuthRequest, res: Response) => 
 
   // Create user with sanitized values
   // User.create() either returns a user document or throws an error - never returns null
-  const user = await User.create({
-    username: sanitizedUsername,
-    email: sanitizedEmail,
-    password,
-  });
+  let user;
+  try {
+    user = await User.create({
+      username: sanitizedUsername,
+      email: sanitizedEmail,
+      password,
+    });
+  } catch (error: any) {
+    // Handle MongoDB duplicate key errors (E11000) - user already exists
+    if (error.code === 11000 || error.code === 11001) {
+      // Check which field caused the duplicate
+      const duplicateField = error.keyPattern?.email ? 'email' : 'username';
+      throw new AppError(`User with this ${duplicateField} already exists`, 400);
+    }
+    // Handle validation errors from Mongoose
+    if (error.name === 'ValidationError') {
+      const firstError = Object.values(error.errors)[0] as any;
+      throw new AppError(firstError?.message || 'Validation failed', 400);
+    }
+    // Re-throw other errors (will be caught by asyncHandler)
+    throw error;
+  }
 
   const token = generateToken(user._id.toString());
   
@@ -119,8 +136,15 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
   const lastActive = new Date(user.lastActiveDate);
   lastActive.setHours(0, 0, 0, 0);
 
-  // Only update streak if logging in on a different day
-  if (today.getTime() > lastActive.getTime()) {
+  // Handle edge case: future dates (timezone issues, manual DB modification)
+  // If lastActive is in the future, treat it as invalid and reset to today
+  if (lastActive.getTime() > today.getTime()) {
+    // Future date detected - reset streak and update to current date
+    user.streak = 1;
+    user.lastActiveDate = new Date();
+    await user.save();
+  } else if (today.getTime() > lastActive.getTime()) {
+    // Only update streak if logging in on a different day (past date)
     const daysDiff = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
     if (daysDiff === 1) {
       // Consecutive day - increment streak
@@ -138,6 +162,7 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     user.lastActiveDate = new Date();
     await user.save();
   }
+  // Note: If lastActive < today (past date), it's already handled above
 
   const token = generateToken(user._id.toString());
 

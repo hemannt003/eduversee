@@ -284,11 +284,14 @@ export const completeLesson = asyncHandler(async (req: AuthRequest, res: Respons
   }
 
   // Check if already completed before atomic operation
-  if (lesson.completedBy.some((id) => id.toString() === req.user!._id.toString())) {
+  // This is an early check to avoid unnecessary database operations
+  const userIdStr = req.user!._id.toString();
+  if (lesson.completedBy.some((id) => id.toString() === userIdStr)) {
     throw new AppError('Lesson already completed', 400);
   }
 
   // Use atomic operation to prevent TOCTOU race condition
+  // $addToSet is idempotent - if user already in array, it won't add again
   const updatedLesson = await Lesson.findByIdAndUpdate(
     req.params.id,
     {
@@ -301,9 +304,29 @@ export const completeLesson = asyncHandler(async (req: AuthRequest, res: Respons
     throw new AppError('Lesson not found', 404);
   }
 
-  // Verify completion succeeded (check if array length increased)
-  // This handles edge case where concurrent request completed lesson between check and update
-  if (updatedLesson.completedBy.length === lesson.completedBy.length) {
+  // Verify completion succeeded by checking if user is actually in completedBy array
+  // This is more reliable than comparing lengths because:
+  // 1. If concurrent request completed lesson, user will be in array (length check would pass incorrectly)
+  // 2. If $addToSet was a no-op (user already in array), user will be in array (correctly detected)
+  // 3. If $addToSet succeeded, user will be in array (correctly detected)
+  const isUserInCompletedBy = updatedLesson.completedBy.some(
+    (id) => id.toString() === userIdStr
+  );
+
+  if (!isUserInCompletedBy) {
+    // This should never happen with $addToSet, but handle edge case
+    throw new AppError('Failed to complete lesson. Please try again.', 500);
+  }
+
+  // Check if this was a duplicate completion attempt (user was already in array before our update)
+  // We need to verify the user wasn't already completed by checking the original lesson state
+  // If user is in updatedLesson but wasn't in original lesson, our update succeeded
+  const wasUserInOriginal = lesson.completedBy.some(
+    (id) => id.toString() === userIdStr
+  );
+
+  if (wasUserInOriginal) {
+    // User was already in completedBy before our update - duplicate completion attempt
     throw new AppError('Lesson already completed', 400);
   }
 
