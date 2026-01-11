@@ -79,6 +79,31 @@ Vercel's free tier only supports static sites and serverless functions, not long
 
 See [DEPLOYMENT_ARCHITECTURE.md](./DEPLOYMENT_ARCHITECTURE.md) for detailed deployment instructions.
 
+## Environment Variables
+
+### Local Development
+
+1. Copy the example environment file:
+   ```bash
+   cd client
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your local backend URL:
+   ```
+   VITE_API_URL=http://localhost:5000/api
+   ```
+
+### Vercel Deployment
+
+Set environment variables in Vercel Dashboard:
+1. Go to your project → **Settings** → **Environment Variables**
+2. Add `VITE_API_URL` with your production backend URL
+3. Select environments (Production, Preview, Development)
+4. Redeploy after adding variables
+
+See [VERCEL_ENV_SETUP.md](./VERCEL_ENV_SETUP.md) for complete setup guide.
+
 ## API Documentation
 
 See `/api-docs` endpoint for detailed API documentation.
