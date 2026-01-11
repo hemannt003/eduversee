@@ -77,7 +77,18 @@ export const useAuthStore = create<AuthState>((set) => {
       set({ loading: true });
       try {
         const response = await api.post('/auth/login', { email, password });
+        
+        // Validate response structure
+        if (!response.data || !response.data.data) {
+          throw new Error('Invalid response from server');
+        }
+        
         const { token, user } = response.data.data;
+        
+        if (!token || !user) {
+          throw new Error('Missing token or user data in response');
+        }
+        
         setToken(token);
         if (typeof window !== 'undefined') {
           localStorage.setItem('auth-storage', JSON.stringify({ user, token }));
@@ -85,7 +96,19 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ user, token, loading: false });
       } catch (error: any) {
         set({ loading: false });
-        throw new Error(error.response?.data?.message || 'Login failed');
+        
+        // Handle different error types
+        if (error.response) {
+          // Server responded with error status
+          const message = error.response.data?.message || error.response.data?.error || 'Login failed';
+          throw new Error(message);
+        } else if (error.request) {
+          // Request was made but no response received (network error)
+          throw new Error('Unable to connect to server. Please check your internet connection.');
+        } else {
+          // Something else happened
+          throw new Error(error.message || 'Login failed. Please try again.');
+        }
       }
     },
     register: async (username: string, email: string, password: string) => {
@@ -96,7 +119,18 @@ export const useAuthStore = create<AuthState>((set) => {
           email,
           password,
         });
+        
+        // Validate response structure
+        if (!response.data || !response.data.data) {
+          throw new Error('Invalid response from server');
+        }
+        
         const { token, user } = response.data.data;
+        
+        if (!token || !user) {
+          throw new Error('Missing token or user data in response');
+        }
+        
         setToken(token);
         if (typeof window !== 'undefined') {
           localStorage.setItem('auth-storage', JSON.stringify({ user, token }));
@@ -104,7 +138,19 @@ export const useAuthStore = create<AuthState>((set) => {
         set({ user, token, loading: false });
       } catch (error: any) {
         set({ loading: false });
-        throw new Error(error.response?.data?.message || 'Registration failed');
+        
+        // Handle different error types
+        if (error.response) {
+          // Server responded with error status
+          const message = error.response.data?.message || error.response.data?.error || 'Registration failed';
+          throw new Error(message);
+        } else if (error.request) {
+          // Request was made but no response received (network error)
+          throw new Error('Unable to connect to server. Please check your internet connection.');
+        } else {
+          // Something else happened
+          throw new Error(error.message || 'Registration failed. Please try again.');
+        }
       }
     },
     logout: () => {
