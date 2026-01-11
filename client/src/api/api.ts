@@ -2,9 +2,24 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-// Log API URL in development to help diagnose connection issues
+// Validate API URL configuration
+const isProduction = import.meta.env.PROD;
+const isLocalhost = API_URL.includes('localhost') || API_URL.includes('127.0.0.1');
+
+// Warn if using localhost in production
+if (isProduction && isLocalhost) {
+  console.error(
+    '⚠️ WARNING: API URL is set to localhost in production!',
+    '\nPlease set VITE_API_URL environment variable in Vercel.',
+    '\nCurrent API URL:', API_URL
+  );
+}
+
+// Log API URL to help diagnose connection issues
 if (import.meta.env.DEV) {
-  console.log('API URL:', API_URL);
+  console.log('🔗 API URL:', API_URL);
+} else if (isProduction) {
+  console.log('🔗 API URL:', API_URL, '(Production)');
 }
 
 const api = axios.create({
@@ -12,7 +27,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 second timeout
+  timeout: 15000, // 15 second timeout (increased for slower connections)
 });
 
 // Add token to requests
@@ -46,17 +61,32 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Handle response errors
+    // Enhanced error logging for debugging
     if (error.response) {
       // Server responded with error status
-      // The error will be handled by the calling code
+      console.error('❌ API Error Response:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        url: error.config?.url,
+        message: error.response.data?.message || error.message,
+      });
       return Promise.reject(error);
     } else if (error.request) {
       // Request was made but no response received
       // This could be a network error, CORS issue, or server down
+      console.error('❌ API Network Error:', {
+        url: error.config?.url,
+        baseURL: error.config?.baseURL,
+        message: error.message,
+        code: error.code,
+        hint: isProduction && isLocalhost 
+          ? 'API URL is set to localhost. Set VITE_API_URL in Vercel environment variables.'
+          : 'Check if backend is running and accessible.',
+      });
       return Promise.reject(error);
     } else {
       // Something else happened
+      console.error('❌ API Error:', error.message);
       return Promise.reject(error);
     }
   }

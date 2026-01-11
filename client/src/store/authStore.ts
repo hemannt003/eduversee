@@ -104,7 +104,27 @@ export const useAuthStore = create<AuthState>((set) => {
           throw new Error(message);
         } else if (error.request) {
           // Request was made but no response received (network error)
-          throw new Error('Unable to connect to server. Please check your internet connection.');
+          const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+          const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
+          
+          if (isLocalhost && import.meta.env.PROD) {
+            throw new Error(
+              'Backend connection failed. The API URL is set to localhost in production. ' +
+              'Please configure VITE_API_URL in Vercel environment variables.'
+            );
+          } else if (error.code === 'ECONNABORTED') {
+            throw new Error('Request timeout. The server is taking too long to respond. Please try again.');
+          } else if (error.code === 'ERR_NETWORK') {
+            throw new Error(
+              'Network error. Unable to reach the server. ' +
+              'Please check if the backend is running and the API URL is correct.'
+            );
+          } else {
+            throw new Error(
+              'Unable to connect to server. ' +
+              'Please check your internet connection and ensure the backend is running.'
+            );
+          }
         } else {
           // Something else happened
           throw new Error(error.message || 'Login failed. Please try again.');
@@ -146,7 +166,27 @@ export const useAuthStore = create<AuthState>((set) => {
           throw new Error(message);
         } else if (error.request) {
           // Request was made but no response received (network error)
-          throw new Error('Unable to connect to server. Please check your internet connection.');
+          const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+          const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
+          
+          if (isLocalhost && import.meta.env.PROD) {
+            throw new Error(
+              'Backend connection failed. The API URL is set to localhost in production. ' +
+              'Please configure VITE_API_URL in Vercel environment variables.'
+            );
+          } else if (error.code === 'ECONNABORTED') {
+            throw new Error('Request timeout. The server is taking too long to respond. Please try again.');
+          } else if (error.code === 'ERR_NETWORK') {
+            throw new Error(
+              'Network error. Unable to reach the server. ' +
+              'Please check if the backend is running and the API URL is correct.'
+            );
+          } else {
+            throw new Error(
+              'Unable to connect to server. ' +
+              'Please check your internet connection and ensure the backend is running.'
+            );
+          }
         } else {
           // Something else happened
           throw new Error(error.message || 'Registration failed. Please try again.');
