@@ -119,8 +119,15 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
   const lastActive = new Date(user.lastActiveDate);
   lastActive.setHours(0, 0, 0, 0);
 
-  // Only update streak if logging in on a different day
-  if (today.getTime() > lastActive.getTime()) {
+  // Handle edge case: future dates (timezone issues, manual DB modification)
+  // If lastActive is in the future, treat it as invalid and reset to today
+  if (lastActive.getTime() > today.getTime()) {
+    // Future date detected - reset streak and update to current date
+    user.streak = 1;
+    user.lastActiveDate = new Date();
+    await user.save();
+  } else if (today.getTime() > lastActive.getTime()) {
+    // Only update streak if logging in on a different day (past date)
     const daysDiff = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
     if (daysDiff === 1) {
       // Consecutive day - increment streak
@@ -138,6 +145,7 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     user.lastActiveDate = new Date();
     await user.save();
   }
+  // Note: If lastActive < today (past date), it's already handled above
 
   const token = generateToken(user._id.toString());
 
