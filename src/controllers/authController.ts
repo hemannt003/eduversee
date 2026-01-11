@@ -11,18 +11,57 @@ import { cache } from '../utils/cache';
 export const register = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { username, email, password } = req.body;
 
-  // Check if user exists
-  const userExists = await User.findOne({ $or: [{ email }, { username }] });
+  // Validate input
+  if (!username || typeof username !== 'string' || username.trim().length === 0) {
+    throw new AppError('Username is required', 400);
+  }
+
+  if (!email || typeof email !== 'string' || email.trim().length === 0) {
+    throw new AppError('Email is required', 400);
+  }
+
+  if (!password || typeof password !== 'string' || password.length === 0) {
+    throw new AppError('Password is required', 400);
+  }
+
+  // Validate password length
+  if (password.length < 6) {
+    throw new AppError('Password must be at least 6 characters', 400);
+  }
+
+  // Sanitize and normalize inputs
+  const sanitizedUsername = username.trim();
+  const sanitizedEmail = email.trim().toLowerCase();
+
+  // Validate username length
+  if (sanitizedUsername.length < 3) {
+    throw new AppError('Username must be at least 3 characters', 400);
+  }
+
+  if (sanitizedUsername.length > 30) {
+    throw new AppError('Username cannot exceed 30 characters', 400);
+  }
+
+  // Validate email format
+  const emailRegex = /^\S+@\S+\.\S+$/;
+  if (!emailRegex.test(sanitizedEmail)) {
+    throw new AppError('Please provide a valid email', 400);
+  }
+
+  // Check if user exists (using sanitized values)
+  const userExists = await User.findOne({ 
+    $or: [{ email: sanitizedEmail }, { username: sanitizedUsername }] 
+  });
 
   if (userExists) {
     throw new AppError('User already exists', 400);
   }
 
-  // Create user
+  // Create user with sanitized values
   // User.create() either returns a user document or throws an error - never returns null
   const user = await User.create({
-    username,
-    email,
+    username: sanitizedUsername,
+    email: sanitizedEmail,
     password,
   });
 
@@ -54,12 +93,20 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { email, password } = req.body;
 
   // Validate email & password
-  if (!email || !password) {
+  if (!email || typeof email !== 'string' || email.trim().length === 0) {
     throw new AppError('Please provide email and password', 400);
   }
 
-  // Check for user
-  const user = await User.findOne({ email }).select('+password');
+  if (!password || typeof password !== 'string' || password.length === 0) {
+    throw new AppError('Please provide email and password', 400);
+  }
+
+  // Normalize email (lowercase and trim) to match User model schema
+  // User model has lowercase: true, so we need to query with lowercase email
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // Check for user with normalized email
+  const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
   if (!user || !(await user.comparePassword(password))) {
     throw new AppError('Invalid credentials', 401);
