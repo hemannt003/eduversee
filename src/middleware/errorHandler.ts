@@ -24,18 +24,46 @@ export class AppError extends Error {
 }
 
 export const errorHandler = (
-  err: AppError,
+  err: Error | any,
   req: Request,
   res: Response,
   next: NextFunction
 ): void => {
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Server Error';
+  // Handle AppError instances
+  if (err instanceof AppError) {
+    const statusCode = err.statusCode || 500;
+    const message = err.message || 'Server Error';
+
+    return res.status(statusCode).json({
+      success: false,
+      message,
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    });
+  }
+
+  // Handle generic Error instances
+  if (err instanceof Error) {
+    const statusCode = (err as any).statusCode || (err as any).status || 500;
+    const message = err.message || 'Server Error';
+
+    return res.status(statusCode).json({
+      success: false,
+      message,
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    });
+  }
+
+  // Handle any other error types (validation errors, database errors, etc.)
+  const statusCode = err?.statusCode || err?.status || 500;
+  const message = err?.message || err?.toString() || 'Server Error';
 
   res.status(statusCode).json({
     success: false,
     message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err?.stack,
+      error: err 
+    }),
   });
 };
 
