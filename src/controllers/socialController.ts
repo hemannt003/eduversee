@@ -116,13 +116,36 @@ export const acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Re
   }
 
   // Add to sender's friends list and remove from sent requests atomically
-  await User.findByIdAndUpdate(
+  // Verify the update succeeded to prevent one-way friendship inconsistency
+  const updatedSenderUser = await User.findByIdAndUpdate(
     senderUserId,
     {
       $addToSet: { friends: currentUserIdObj },
       $pull: { 'friendRequests.sent': currentUserIdObj },
-    }
+    },
+    { new: true }
   );
+
+  if (!updatedSenderUser) {
+    // If sender user was deleted or update failed, rollback the current user's changes
+    // to prevent one-way friendship inconsistency
+    await User.findByIdAndUpdate(
+      req.user!._id,
+      {
+        $pull: { friends: senderUserIdObj },
+        $addToSet: { 'friendRequests.received': senderUserIdObj },
+      }
+    );
+    throw new AppError('Failed to update sender user. Friend request acceptance was rolled back.', 500);
+  }
+
+  // Verify friend was added to sender's list (check if array length increased)
+  const originalSenderFriendsLength = senderUser.friends.length;
+  if (updatedSenderUser.friends.length === originalSenderFriendsLength) {
+    // Friend already existed in sender's list, but we still need to ensure consistency
+    // This shouldn't happen in normal flow, but handle it gracefully
+    // No rollback needed as both users already have each other as friends
+  }
 
   // Create activities
   await Activity.create({
@@ -191,15 +214,29 @@ export const createTeam = asyncHandler(async (req: AuthRequest, res: Response) =
     throw new AppError('Team name already exists', 400);
   }
 
-  const team = await Team.create({
-    name: name.trim(),
-    description: description ? String(description).trim() : '',
-    leader: req.user!._id, // Always set to current user
-    members: [req.user!._id], // Always start with creator
-    maxMembers: validatedMaxMembers,
-    xp: 0, // Always start at 0
-    level: 1, // Always start at 1
-  });
+  // Attempt to create team
+  // Handle TOCTOU race condition: if two requests try to create the same team name
+  // simultaneously, MongoDB's unique constraint will catch the duplicate
+  let team;
+  try {
+    team = await Team.create({
+      name: name.trim(),
+      description: description ? String(description).trim() : '',
+      leader: req.user!._id, // Always set to current user
+      members: [req.user!._id], // Always start with creator
+      maxMembers: validatedMaxMembers,
+      xp: 0, // Always start at 0
+      level: 1, // Always start at 1
+    });
+  } catch (error: any) {
+    // MongoDB duplicate key error (E11000) occurs when unique constraint is violated
+    // This handles the race condition where two requests create the same team name
+    if (error.code === 11000 || error.code === 11001) {
+      throw new AppError('Team name already exists', 400);
+    }
+    // Re-throw other errors
+    throw error;
+  }
 
   // Add user to team
   const user = await User.findById(req.user!._id);

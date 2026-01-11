@@ -111,7 +111,8 @@ const CourseDetail = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {sortedLessons.map((lesson) => {
               // Handle both string and ObjectId types from backend
-              const isCompleted = user ? lesson.completedBy.some(
+              // Safely check completion status - completedBy may be undefined if not populated
+              const isCompleted = user && lesson.completedBy ? lesson.completedBy.some(
                 (id) => {
                   const idStr = typeof id === 'string' ? id : id.toString();
                   return idStr === user.id.toString();

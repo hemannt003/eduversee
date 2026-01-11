@@ -27,7 +27,21 @@ const Achievements = () => {
       setAchievements(response.data.data);
       
       // Check for new achievements
-      await api.post('/game/check-achievements');
+      const checkResponse = await api.post('/game/check-achievements');
+      
+      // Response structure: { success: true, data: { unlocked: [...] } }
+      const unlockedAchievements = checkResponse.data.data?.unlocked || [];
+      
+      // If new achievements were unlocked, refetch the full list to update UI
+      if (unlockedAchievements.length > 0) {
+        const updatedResponse = await api.get('/game/achievements');
+        setAchievements(updatedResponse.data.data);
+        
+        // Show notification for newly unlocked achievements
+        unlockedAchievements.forEach((achievement: Achievement) => {
+          toast.success(`Achievement Unlocked: ${achievement.name}! 🎉`);
+        });
+      }
     } catch (error: any) {
       toast.error('Failed to load achievements');
     } finally {

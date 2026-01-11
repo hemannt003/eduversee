@@ -91,7 +91,7 @@ export const getCourse = asyncHandler(async (req: AuthRequest, res: Response) =>
     .populate('instructor', 'username avatar level')
     .populate({
       path: 'lessons',
-      select: 'title order xpReward',
+      select: 'title order xpReward completedBy',
       options: { sort: { order: 1 } },
     });
 
