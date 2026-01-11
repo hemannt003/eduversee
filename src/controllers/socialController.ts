@@ -116,13 +116,36 @@ export const acceptFriendRequest = asyncHandler(async (req: AuthRequest, res: Re
   }
 
   // Add to sender's friends list and remove from sent requests atomically
-  await User.findByIdAndUpdate(
+  // Verify the update succeeded to prevent one-way friendship inconsistency
+  const updatedSenderUser = await User.findByIdAndUpdate(
     senderUserId,
     {
       $addToSet: { friends: currentUserIdObj },
       $pull: { 'friendRequests.sent': currentUserIdObj },
-    }
+    },
+    { new: true }
   );
+
+  if (!updatedSenderUser) {
+    // If sender user was deleted or update failed, rollback the current user's changes
+    // to prevent one-way friendship inconsistency
+    await User.findByIdAndUpdate(
+      req.user!._id,
+      {
+        $pull: { friends: senderUserIdObj },
+        $addToSet: { 'friendRequests.received': senderUserIdObj },
+      }
+    );
+    throw new AppError('Failed to update sender user. Friend request acceptance was rolled back.', 500);
+  }
+
+  // Verify friend was added to sender's list (check if array length increased)
+  const originalSenderFriendsLength = senderUser.friends.length;
+  if (updatedSenderUser.friends.length === originalSenderFriendsLength) {
+    // Friend already existed in sender's list, but we still need to ensure consistency
+    // This shouldn't happen in normal flow, but handle it gracefully
+    // No rollback needed as both users already have each other as friends
+  }
 
   // Create activities
   await Activity.create({
