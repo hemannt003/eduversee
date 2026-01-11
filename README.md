@@ -68,6 +68,17 @@ redis-server
 npm run dev
 ```
 
+## Deployment
+
+**Important**: This application uses a separated frontend/backend architecture:
+
+- **Frontend**: Deployed to Vercel (static hosting)
+- **Backend**: Must be deployed separately to Railway, Render, Heroku, or similar service
+
+Vercel's free tier only supports static sites and serverless functions, not long-running Node.js servers. The Express backend with WebSocket support requires a service that supports persistent connections.
+
+See [DEPLOYMENT_ARCHITECTURE.md](./DEPLOYMENT_ARCHITECTURE.md) for detailed deployment instructions.
+
 ## API Documentation
 
 See `/api-docs` endpoint for detailed API documentation.
