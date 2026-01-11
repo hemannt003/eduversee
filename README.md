@@ -96,13 +96,20 @@ See [DEPLOYMENT_ARCHITECTURE.md](./DEPLOYMENT_ARCHITECTURE.md) for detailed depl
 
 ### Vercel Deployment
 
-Set environment variables in Vercel Dashboard:
-1. Go to your project → **Settings** → **Environment Variables**
-2. Add `VITE_API_URL` with your production backend URL
-3. Select environments (Production, Preview, Development)
-4. Redeploy after adding variables
+**⚠️ IMPORTANT:** If you see the error "Backend connection failed. The API URL is set to localhost in production", you need to set `VITE_API_URL` in Vercel.
 
-See [VERCEL_ENV_SETUP.md](./VERCEL_ENV_SETUP.md) for complete setup guide.
+**Quick Fix:**
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard) → Your Project → **Settings** → **Environment Variables**
+2. Click **Add New**
+3. **Name:** `VITE_API_URL`
+4. **Value:** `https://your-backend-url.com/api` (your actual backend URL with `/api`)
+5. **Environments:** Select all (Production, Preview, Development)
+6. Click **Save**
+7. **Redeploy** your application (Deployments → ... → Redeploy)
+
+**See [VERCEL_ENV_QUICK_SETUP.md](./VERCEL_ENV_QUICK_SETUP.md) for step-by-step guide with screenshots.**
+
+For detailed setup, see [VERCEL_ENV_SETUP.md](./VERCEL_ENV_SETUP.md).
 
 ## API Documentation
 
