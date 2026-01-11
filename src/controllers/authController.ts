@@ -59,11 +59,28 @@ export const register = asyncHandler(async (req: AuthRequest, res: Response) => 
 
   // Create user with sanitized values
   // User.create() either returns a user document or throws an error - never returns null
-  const user = await User.create({
-    username: sanitizedUsername,
-    email: sanitizedEmail,
-    password,
-  });
+  let user;
+  try {
+    user = await User.create({
+      username: sanitizedUsername,
+      email: sanitizedEmail,
+      password,
+    });
+  } catch (error: any) {
+    // Handle MongoDB duplicate key errors (E11000) - user already exists
+    if (error.code === 11000 || error.code === 11001) {
+      // Check which field caused the duplicate
+      const duplicateField = error.keyPattern?.email ? 'email' : 'username';
+      throw new AppError(`User with this ${duplicateField} already exists`, 400);
+    }
+    // Handle validation errors from Mongoose
+    if (error.name === 'ValidationError') {
+      const firstError = Object.values(error.errors)[0] as any;
+      throw new AppError(firstError?.message || 'Validation failed', 400);
+    }
+    // Re-throw other errors (will be caught by asyncHandler)
+    throw error;
+  }
 
   const token = generateToken(user._id.toString());
   
