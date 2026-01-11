@@ -29,13 +29,16 @@ const Achievements = () => {
       // Check for new achievements
       const checkResponse = await api.post('/game/check-achievements');
       
+      // Response structure: { success: true, data: { unlocked: [...] } }
+      const unlockedAchievements = checkResponse.data.data?.unlocked || [];
+      
       // If new achievements were unlocked, refetch the full list to update UI
-      if (checkResponse.data.data && checkResponse.data.data.length > 0) {
+      if (unlockedAchievements.length > 0) {
         const updatedResponse = await api.get('/game/achievements');
         setAchievements(updatedResponse.data.data);
         
         // Show notification for newly unlocked achievements
-        checkResponse.data.data.forEach((achievement: Achievement) => {
+        unlockedAchievements.forEach((achievement: Achievement) => {
           toast.success(`Achievement Unlocked: ${achievement.name}! 🎉`);
         });
       }
