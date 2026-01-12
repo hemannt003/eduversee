@@ -63,8 +63,11 @@ const API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL);
 const isProduction = import.meta.env.PROD;
 const isLocalhost = API_URL.includes('localhost') || API_URL.includes('127.0.0.1');
 
+// Check if API URL is invalid for production
+export const isApiUrlInvalid = isProduction && isLocalhost;
+
 // Warn if using localhost in production
-if (isProduction && isLocalhost) {
+if (isApiUrlInvalid) {
   console.error(
     '⚠️ WARNING: API URL is set to localhost in production!',
     '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
@@ -96,6 +99,15 @@ const api = axios.create({
 
 // Add token to requests
 api.interceptors.request.use((config) => {
+  // Block requests if localhost is detected in production
+  if (isApiUrlInvalid) {
+    const error = new Error(
+      'API URL is set to localhost in production. Please configure VITE_API_URL in Vercel environment variables.'
+    );
+    (error as any).isConfigError = true;
+    return Promise.reject(error);
+  }
+
   // Guard against SSR/build-time execution
   if (typeof window !== 'undefined') {
     const authStorage = localStorage.getItem('auth-storage');
