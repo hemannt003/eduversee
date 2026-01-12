@@ -1,6 +1,37 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Normalize and validate API URL
+const normalizeApiUrl = (url: string | undefined): string => {
+  if (!url) {
+    return 'http://localhost:5000/api';
+  }
+
+  // Remove trailing slashes
+  let normalized = url.trim().replace(/\/+$/, '');
+
+  // Ensure /api is at the end (unless it's already there)
+  if (!normalized.endsWith('/api')) {
+    // If it ends with /api/, remove the trailing slash
+    if (normalized.endsWith('/api/')) {
+      normalized = normalized.slice(0, -1);
+    } else {
+      // Add /api if not present
+      normalized = normalized + '/api';
+    }
+  }
+
+  // Validate URL format
+  try {
+    new URL(normalized);
+  } catch (e) {
+    console.error('⚠️ Invalid API URL format:', url, 'Using default localhost');
+    return 'http://localhost:5000/api';
+  }
+
+  return normalized;
+};
+
+const API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL);
 
 // Validate API URL configuration
 const isProduction = import.meta.env.PROD;
