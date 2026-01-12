@@ -24,23 +24,37 @@ interface AuthState {
 // Define setToken before it's used
 // Note: We still need to set the token on the api instance for the interceptor
 const setToken = (token: string | null) => {
+  if (typeof window === 'undefined') {
+    return; // Guard against SSR/build-time execution
+  }
+
   if (token) {
     // Store token in localStorage for the interceptor to pick up
-    if (typeof window !== 'undefined') {
-      const current = localStorage.getItem('auth-storage');
-      if (current) {
+    const current = localStorage.getItem('auth-storage');
+    if (current) {
+      // Update existing storage
+      try {
         const parsed = JSON.parse(current);
         localStorage.setItem('auth-storage', JSON.stringify({ ...parsed, token }));
+      } catch (e) {
+        // If parsing fails, initialize new storage
+        localStorage.setItem('auth-storage', JSON.stringify({ token }));
       }
+    } else {
+      // Initialize storage if it doesn't exist (first login/registration)
+      localStorage.setItem('auth-storage', JSON.stringify({ token }));
     }
   } else {
     // Remove token from localStorage
-    if (typeof window !== 'undefined') {
-      const current = localStorage.getItem('auth-storage');
-      if (current) {
+    const current = localStorage.getItem('auth-storage');
+    if (current) {
+      try {
         const parsed = JSON.parse(current);
         delete parsed.token;
         localStorage.setItem('auth-storage', JSON.stringify(parsed));
+      } catch (e) {
+        // If parsing fails, remove storage entirely
+        localStorage.removeItem('auth-storage');
       }
     }
   }
@@ -109,8 +123,13 @@ export const useAuthStore = create<AuthState>((set) => {
           
           if (isLocalhost && import.meta.env.PROD) {
             throw new Error(
-              'Backend connection failed. The API URL is set to localhost in production. ' +
-              'Please configure VITE_API_URL in Vercel environment variables.'
+              'Backend connection failed. The API URL is set to localhost in production.\n\n' +
+              'QUICK FIX:\n' +
+              '1. Go to https://vercel.com/dashboard\n' +
+              '2. Select your project → Settings → Environment Variables\n' +
+              '3. Add: VITE_API_URL = https://your-backend-url.com/api\n' +
+              '4. Redeploy your application\n\n' +
+              'See VERCEL_ENV_QUICK_SETUP.md for detailed instructions.'
             );
           } else if (error.code === 'ECONNABORTED') {
             throw new Error('Request timeout. The server is taking too long to respond. Please try again.');
@@ -171,8 +190,13 @@ export const useAuthStore = create<AuthState>((set) => {
           
           if (isLocalhost && import.meta.env.PROD) {
             throw new Error(
-              'Backend connection failed. The API URL is set to localhost in production. ' +
-              'Please configure VITE_API_URL in Vercel environment variables.'
+              'Backend connection failed. The API URL is set to localhost in production.\n\n' +
+              'QUICK FIX:\n' +
+              '1. Go to https://vercel.com/dashboard\n' +
+              '2. Select your project → Settings → Environment Variables\n' +
+              '3. Add: VITE_API_URL = https://your-backend-url.com/api\n' +
+              '4. Redeploy your application\n\n' +
+              'See VERCEL_ENV_QUICK_SETUP.md for detailed instructions.'
             );
           } else if (error.code === 'ECONNABORTED') {
             throw new Error('Request timeout. The server is taking too long to respond. Please try again.');

@@ -10,7 +10,14 @@ const isLocalhost = API_URL.includes('localhost') || API_URL.includes('127.0.0.1
 if (isProduction && isLocalhost) {
   console.error(
     '⚠️ WARNING: API URL is set to localhost in production!',
-    '\nPlease set VITE_API_URL environment variable in Vercel.',
+    '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '\n🔧 QUICK FIX:',
+    '\n1. Go to: https://vercel.com/dashboard',
+    '\n2. Select your project → Settings → Environment Variables',
+    '\n3. Add: VITE_API_URL = https://your-backend-url.com/api',
+    '\n4. Redeploy your application',
+    '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '\n📖 Full guide: See VERCEL_ENV_QUICK_SETUP.md in the repository',
     '\nCurrent API URL:', API_URL
   );
 }
