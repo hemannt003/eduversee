@@ -9,18 +9,44 @@ const normalizeApiUrl = (url: string | undefined): string => {
   // Remove trailing slashes
   let normalized = url.trim().replace(/\/+$/, '');
 
-  // Ensure /api is at the end (unless it's already there)
-  if (!normalized.endsWith('/api')) {
-    // If it ends with /api/, remove the trailing slash
-    if (normalized.endsWith('/api/')) {
-      normalized = normalized.slice(0, -1);
-    } else {
-      // Add /api if not present
-      normalized = normalized + '/api';
+  // Parse URL to check path
+  try {
+    const urlObj = new URL(normalized);
+    const pathname = urlObj.pathname;
+
+    // Check if /api is already in the path (at any position)
+    // This handles cases like /api/v1, /api/v2, etc.
+    if (pathname.includes('/api')) {
+      // /api is already in the path, just ensure no trailing slash
+      // Don't append /api again
+      return normalized;
     }
+
+    // /api is not in the path, add it
+    // Ensure it's added to the pathname, not just concatenated
+    if (pathname === '/' || pathname === '') {
+      urlObj.pathname = '/api';
+    } else {
+      urlObj.pathname = pathname.endsWith('/') 
+        ? pathname + 'api' 
+        : pathname + '/api';
+    }
+    normalized = urlObj.toString().replace(/\/+$/, ''); // Remove trailing slash again
+  } catch (e) {
+    // If URL parsing fails, try simple string manipulation
+    // Check if /api is already in the URL path
+    const urlPath = normalized.split('://')[1]?.split('/').slice(1).join('/') || '';
+    
+    if (urlPath.includes('/api') || normalized.includes('/api/')) {
+      // /api is already present, just normalize trailing slash
+      return normalized;
+    }
+
+    // Simple append if URL parsing failed but URL seems valid
+    normalized = normalized + '/api';
   }
 
-  // Validate URL format
+  // Validate final URL format
   try {
     new URL(normalized);
   } catch (e) {
