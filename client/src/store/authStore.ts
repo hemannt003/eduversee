@@ -116,7 +116,20 @@ export const useAuthStore = create<AuthState>((set) => {
           // Server responded with error status
           const message = error.response.data?.message || error.response.data?.error || 'Login failed';
           throw new Error(message);
-        } else if (error.request) {
+        } else if (error.request || (error as any).isConfigError) {
+          // Check for configuration error first
+          if ((error as any).isConfigError) {
+            throw new Error(
+              'API URL is set to localhost in production. Please configure VITE_API_URL in Vercel environment variables.\n\n' +
+              'QUICK FIX:\n' +
+              '1. Go to https://vercel.com/dashboard\n' +
+              '2. Select your project → Settings → Environment Variables\n' +
+              '3. Add: VITE_API_URL = https://your-backend-url.com/api\n' +
+              '4. Redeploy your application\n\n' +
+              'See VERCEL_ENV_QUICK_SETUP.md for detailed instructions.'
+            );
+          }
+          
           // Request was made but no response received (network error)
           const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
           const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
@@ -183,7 +196,20 @@ export const useAuthStore = create<AuthState>((set) => {
           // Server responded with error status
           const message = error.response.data?.message || error.response.data?.error || 'Registration failed';
           throw new Error(message);
-        } else if (error.request) {
+        } else if (error.request || (error as any).isConfigError) {
+          // Check for configuration error first
+          if ((error as any).isConfigError) {
+            throw new Error(
+              'API URL is set to localhost in production. Please configure VITE_API_URL in Vercel environment variables.\n\n' +
+              'QUICK FIX:\n' +
+              '1. Go to https://vercel.com/dashboard\n' +
+              '2. Select your project → Settings → Environment Variables\n' +
+              '3. Add: VITE_API_URL = https://your-backend-url.com/api\n' +
+              '4. Redeploy your application\n\n' +
+              'See VERCEL_ENV_QUICK_SETUP.md for detailed instructions.'
+            );
+          }
+          
           // Request was made but no response received (network error)
           const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
           const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');

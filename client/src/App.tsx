@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
 import Navbar from './components/Navbar';
+import ConfigError from './components/ConfigError';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -17,6 +18,7 @@ function App() {
 
   return (
     <div className="App">
+      <ConfigError />
       <Toaster position="top-right" />
       {token && <Navbar />}
       <Routes>
