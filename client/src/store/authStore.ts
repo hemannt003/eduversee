@@ -24,23 +24,37 @@ interface AuthState {
 // Define setToken before it's used
 // Note: We still need to set the token on the api instance for the interceptor
 const setToken = (token: string | null) => {
+  if (typeof window === 'undefined') {
+    return; // Guard against SSR/build-time execution
+  }
+
   if (token) {
     // Store token in localStorage for the interceptor to pick up
-    if (typeof window !== 'undefined') {
-      const current = localStorage.getItem('auth-storage');
-      if (current) {
+    const current = localStorage.getItem('auth-storage');
+    if (current) {
+      // Update existing storage
+      try {
         const parsed = JSON.parse(current);
         localStorage.setItem('auth-storage', JSON.stringify({ ...parsed, token }));
+      } catch (e) {
+        // If parsing fails, initialize new storage
+        localStorage.setItem('auth-storage', JSON.stringify({ token }));
       }
+    } else {
+      // Initialize storage if it doesn't exist (first login/registration)
+      localStorage.setItem('auth-storage', JSON.stringify({ token }));
     }
   } else {
     // Remove token from localStorage
-    if (typeof window !== 'undefined') {
-      const current = localStorage.getItem('auth-storage');
-      if (current) {
+    const current = localStorage.getItem('auth-storage');
+    if (current) {
+      try {
         const parsed = JSON.parse(current);
         delete parsed.token;
         localStorage.setItem('auth-storage', JSON.stringify(parsed));
+      } catch (e) {
+        // If parsing fails, remove storage entirely
+        localStorage.removeItem('auth-storage');
       }
     }
   }
